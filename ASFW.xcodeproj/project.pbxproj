@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A80000000000000000000001 /* Fireface800SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A80000000000000000000002 /* Fireface800SettingsView.swift */; };
 		00CA983D134982805DA55753 /* AnalyzerCalibrationState.swift in Sources */ = {isa = PBXBuildFile; fileRef = AD43066EE46FD26D0E8F3607 /* AnalyzerCalibrationState.swift */; };
 		0133F65C204E70DA7C097D04 /* AnalyzerPlotAxes.swift in Sources */ = {isa = PBXBuildFile; fileRef = BCCC16C6B560CCA8DCD16838 /* AnalyzerPlotAxes.swift */; };
 		0138279CCF7380AF46C498FA /* DiscoveryReducer.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 8AEB1E7521FD09C727D7C415 /* DiscoveryReducer.cpp */; };
@@ -604,6 +605,7 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		A80000000000000000000002 /* Fireface800SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Fireface800SettingsView.swift; sourceTree = "<group>"; };
 		000306805A99C7CA776E297C /* DiceReceiverDumpSnapshot.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = DiceReceiverDumpSnapshot.hpp; sourceTree = "<group>"; };
 		003D261C038E0434E7A8B214 /* LogRing.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = LogRing.cpp; sourceTree = "<group>"; };
 		00744EB824D48D9F716E153A /* PostResetTimingCoordinator.hpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.h; path = PostResetTimingCoordinator.hpp; sourceTree = "<group>"; };
@@ -2423,6 +2425,7 @@
 				983FFE1617FDE6BE97522EEB /* CompareSwapView.swift */,
 				FCD731960BD463377A35C2E5 /* ControllerDetailView.swift */,
 				552789B817E70BD491801819 /* DeviceControlsView.swift */,
+				A80000000000000000000002 /* Fireface800SettingsView.swift */,
 				0D79C278B0F589F03BB2E627 /* DeviceDetailView.swift */,
 				C83DE86FA12575E4A0AB618D /* DiagnosticsView.swift */,
 				6357F7E427D7C3E7ACDADD57 /* DiceDiagnosticsDocument.swift */,
@@ -4817,6 +4820,7 @@
 				8B2D4B6C8439F85C8060469C /* DVFrameAssembler.swift in Sources */,
 				08226566207B350FA29DBC85 /* DebugViewModel.swift in Sources */,
 				C5C24D3E9F14ED23E9839202 /* DeviceControlsView.swift in Sources */,
+				A80000000000000000000001 /* Fireface800SettingsView.swift in Sources */,
 				1B4D0F45BC79725E3FE2AD88 /* DeviceControlsViewModel.swift in Sources */,
 				A68ED17A5204BABFCA0885EC /* DeviceDetailView.swift in Sources */,
 				5B89574205BE33D89A93E110 /* DiagnosticsReport.swift in Sources */,
