@@ -74,6 +74,7 @@ struct ModernContentView: View {
         case busInspector = "Bus Inspector"
         case avcUnits = "AV/C Units"
         case deviceControls = "Device Controls"
+        case fireface800 = "Fireface 800"
         case avcCommands = "AV/C Commands"
         case controller = "Controller Status"
         case async = "Async Commands"
@@ -101,6 +102,7 @@ struct ModernContentView: View {
             case .busInspector: return "network"
             case .avcUnits: return "music.note"
             case .deviceControls: return "slider.vertical.3"
+            case .fireface800: return "dial.low"
             case .avcCommands: return "command"
             case .controller: return "cpu"
             case .async: return "bolt.horizontal.circle"
@@ -124,7 +126,7 @@ struct ModernContentView: View {
         var group: SidebarGroup {
             switch self {
             case .overview, .about: .general
-            case .busInspector, .avcUnits, .deviceControls, .audioAnalyzer: .devices
+            case .busInspector, .avcUnits, .deviceControls, .fireface800, .audioAnalyzer: .devices
             case .dvCapture: .video
             case .diagnostics, .diceReport, .avcReport: .reports
             case .logs, .loggingSettings: .support
@@ -216,6 +218,8 @@ struct ModernContentView: View {
                     AvcUnitsView(store: avcUnitsStore, connector: debugVM.connector, developerTools: showAdvancedTools)
                 case .deviceControls:
                     DeviceControlsView(model: deviceControlsVM)
+                case .fireface800:
+                    Fireface800SettingsView()
                 case .avcCommands:
                     AVCCommandView(viewModel: debugVM)
                 case .controller:
