@@ -136,6 +136,7 @@ final class DeviceControlsViewModel: ObservableObject {
         ff800Diagnostic = nil
         ff800DiagnosticAvailability = .notChecked
         guard source.isConnected else {
+            ff800DiagnosticAvailability = .driverDisconnected
             devices = []
             writeStates = [:]
             lastChangeSequence = [:]
