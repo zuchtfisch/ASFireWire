@@ -164,6 +164,25 @@ struct Fireface800SettingsView: View {
     }
 
 
+    // Treat flash values as a coherent read-only snapshot, never as live
+    // measurements. Do not render a snapshot left over from another device,
+    // a disconnected driver, or a different control provider.
+    private var validatedSavedSnapshot: ControlSnapshot? {
+        guard controls.isConnected,
+              let selected = controls.selectedDevice,
+              let snapshot = controls.snapshot,
+              snapshot.family == "rme-ff800-flash",
+              snapshot.guid.caseInsensitiveCompare(selected.guidHex) == .orderedSame,
+              snapshot.parameters.count == 9,
+              Set(snapshot.parameters.map(\.id)) == Set(UInt32(0xF80001)...UInt32(0xF80009)),
+              snapshot.parameters.allSatisfy({
+                  $0.access == .readOnly && $0.origin == .cached && $0.value != nil
+              }) else {
+            return nil
+        }
+        return snapshot
+    }
+
     @ViewBuilder
     private var savedSettingsSection: some View {
         GroupBox("Saved device settings (read only)") {
@@ -178,8 +197,7 @@ struct Fireface800SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                if let snapshot = controls.snapshot,
-                   snapshot.family == "rme-ff800-flash" {
+                if let snapshot = validatedSavedSnapshot {
                     ForEach(snapshot.parameters.sorted(by: { $0.id < $1.id })) { parameter in
                         HStack {
                             Text(parameter.name)
@@ -194,7 +212,7 @@ struct Fireface800SettingsView: View {
                     Label("Driver not connected", systemImage: "cable.connector.slash")
                         .foregroundStyle(.secondary)
                 } else {
-                    Text("No cached FF800 settings available. Flash settings are captured during audio configuration; Refresh does not read the hardware.")
+                    Text("No valid cached FF800 snapshot available for the selected device. A snapshot must identify this device and contain nine read-only, cached settings. Flash settings are captured during audio configuration; Refresh does not read the hardware.")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
