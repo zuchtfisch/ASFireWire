@@ -7,6 +7,8 @@
 import SwiftUI
 
 struct Fireface800SettingsView: View {
+    @ObservedObject var controls: DeviceControlsViewModel
+
     enum Jack: Int, CaseIterable, Identifiable {
         case rear = 0
         case front = 1
@@ -92,6 +94,8 @@ struct Fireface800SettingsView: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
+                savedSettingsSection
+
                 GroupBox("Microphone phantom power (48 V)") {
                     VStack(alignment: .leading, spacing: 12) {
                         Toggle("Input 7", isOn: $phantom7)
@@ -157,6 +161,70 @@ struct Fireface800SettingsView: View {
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .navigationTitle("Fireface 800")
+        .task { refreshSavedSettings() }
+    }
+
+
+    @ViewBuilder
+    private var savedSettingsSection: some View {
+        GroupBox("Saved device settings (read only)") {
+            VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Last flash settings cached by the driver")
+                    Spacer()
+                    Button("Refresh") { refreshSavedSettings() }
+                        .disabled(!controls.isConnected)
+                }
+                Text("Not live measurements. A saved 48 V setting does NOT confirm that phantom power is currently on or off.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                if let snapshot = controls.snapshot,
+                   snapshot.family == "rme-ff800-flash",
+                   controls.selectedDevice?.title.localizedCaseInsensitiveContains("Fireface 800") == true {
+                    ForEach(snapshot.parameters.sorted(by: { $0.id < $1.id })) { parameter in
+                        HStack {
+                            Text(parameter.name)
+                            Spacer()
+                            Text(savedValue(parameter))
+                                .monospacedDigit()
+                                .foregroundStyle(.secondary)
+                        }
+                        .font(.callout)
+                    }
+                } else if !controls.isConnected {
+                    Label("Driver not connected", systemImage: "cable.connector.slash")
+                        .foregroundStyle(.secondary)
+                } else {
+                    Text("No cached FF800 settings available. Flash settings are captured during audio configuration; Refresh does not read the hardware.")
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(8)
+        }
+    }
+
+    private func refreshSavedSettings() {
+        controls.reload()
+        if let device = controls.devices.first(where: { $0.title.localizedCaseInsensitiveContains("Fireface 800") }) {
+            controls.select(device.guid)
+        }
+    }
+
+    private func savedValue(_ parameter: ControlParameter) -> String {
+        guard let value = parameter.value else { return "Unavailable" }
+        switch value {
+        case .bool(let on): return on ? "Saved: On" : "Saved: Off"
+        case .int(let raw):
+            if case .enumeration(let items) = parameter.domain,
+               let item = items.first(where: { $0.value == raw }) {
+                return item.name
+            }
+            return String(raw)
+        case .double(let raw): return String(raw)
+        case .action: return "Unavailable"
+        }
     }
 
     private func jackPicker(_ title: String, selection: Binding<Jack>) -> some View {
