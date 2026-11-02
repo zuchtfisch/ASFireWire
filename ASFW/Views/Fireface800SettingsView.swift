@@ -1,9 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 // Copyright (c) 2026 ASFireWire Project
 //
-// Fireface 800 settings editor preview. This view deliberately makes NO driver
-// calls: the FF800 controls are not yet projected through ASFW's control service.
-// Values are local drafts, NOT current hardware state.
+// Fireface 800 editor preview with a read-only driver-cache panel.
+// Editable values are local drafts, NOT current hardware state.
 import SwiftUI
 
 struct Fireface800SettingsView: View {
@@ -180,8 +179,7 @@ struct Fireface800SettingsView: View {
                     .foregroundStyle(.secondary)
 
                 if let snapshot = controls.snapshot,
-                   snapshot.family == "rme-ff800-flash",
-                   controls.selectedDevice?.title.localizedCaseInsensitiveContains("Fireface 800") == true {
+                   snapshot.family == "rme-ff800-flash" {
                     ForEach(snapshot.parameters.sorted(by: { $0.id < $1.id })) { parameter in
                         HStack {
                             Text(parameter.name)
@@ -206,9 +204,19 @@ struct Fireface800SettingsView: View {
     }
 
     private func refreshSavedSettings() {
+        // Names from discovery are not guaranteed to contain "Fireface 800".
+        // Identify the cached settings by the provider's explicit family tag.
+        // The shared model's calls here read only driver snapshots, never
+        // device registers. Restore the prior selection if none is available.
+        let previousGUID = controls.selectedGUID
         controls.reload()
-        if let device = controls.devices.first(where: { $0.title.localizedCaseInsensitiveContains("Fireface 800") }) {
+        if controls.snapshot?.family == "rme-ff800-flash" { return }
+        for device in controls.devices where device.guid != controls.selectedGUID {
             controls.select(device.guid)
+            if controls.snapshot?.family == "rme-ff800-flash" { return }
+        }
+        if let previousGUID, controls.devices.contains(where: { $0.guid == previousGUID }) {
+            controls.select(previousGUID)
         }
     }
 
