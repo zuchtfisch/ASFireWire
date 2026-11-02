@@ -662,10 +662,18 @@ struct FF800SessionDiagnosticWireTests {
 
     private func discovered(_ generation: UInt32 = 9,
                             state: DriverConnectorFWDeviceState = .ready,
-                            node: UInt8 = 3) -> FWDeviceInfo {
-        FWDeviceInfo(id: guid, guid: guid, vendorId: 0x000A35, modelId: 0x101800,
-                     vendorName: "RME", modelName: "Fireface 800", nodeId: node,
-                     generation: generation, state: state, units: [], deviceKind: 3)
+                            node: UInt8 = 3,
+                            unitVersion: UInt32 = 1,
+                            vendor: UInt32 = 0x000A35) -> FWDeviceInfo {
+        let unit = FWUnitInfo(
+            specId: 0x000A35, swVersion: unitVersion, state: .ready,
+            romOffset: 0, managementAgentOffset: nil, lun: nil,
+            unitCharacteristics: nil, fastStart: nil,
+            vendorName: nil, productName: nil)
+        return FWDeviceInfo(
+            id: guid, guid: guid, vendorId: vendor, modelId: 0x101800,
+            vendorName: "RME", modelName: "Fireface 800", nodeId: node,
+            generation: generation, state: state, units: [unit], deviceKind: 3)
     }
 
     @Test func viewModelDisplaysOnlyMatchingReadyObservation() {
@@ -688,6 +696,39 @@ struct FF800SessionDiagnosticWireTests {
     @Test func viewModelRejectsResetBetweenDiscoveryReads() {
         let driver = FakeControlsDriver()
         driver.discoveryReplies = [[discovered(9)], [discovered(10)]]
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+        model.select(guid)
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.diagnosticReads == 1)
+        #expect(driver.writes.isEmpty)
+    }
+
+    @Test func viewModelDoesNotQueryFF400OrUnidentifiedDevice() {
+        let driver = FakeControlsDriver()
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+
+        driver.discoveryReplies = [[discovered(unitVersion: 2)]]
+        model.select(guid)
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.diagnosticReads == 0)
+
+        driver.discoveryReplies = [[discovered(unitVersion: 0)]]
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.diagnosticReads == 0)
+
+        driver.discoveryReplies = [[discovered(vendor: 0x00AAAA)]]
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.diagnosticReads == 0)
+        #expect(driver.writes.isEmpty)
+    }
+
+    @Test func viewModelRejectsIdentityChangeDuringIPC() {
+        let driver = FakeControlsDriver()
+        driver.discoveryReplies = [[discovered()], [discovered(unitVersion: 2)]]
         driver.diagnosticReply = .success(envelope())
         let model = DeviceControlsViewModel(source: driver)
         model.select(guid)
