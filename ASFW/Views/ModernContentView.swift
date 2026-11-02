@@ -20,6 +20,7 @@ struct ModernContentView: View {
     @StateObject private var avcReportStore: AvcReportStore
     @StateObject private var avcUnitsStore: AvcUnitsStore
     @StateObject private var deviceControlsVM: DeviceControlsViewModel
+    @StateObject private var ff800ControlsVM: DeviceControlsViewModel
     @StateObject private var mcpVM: ASFWMCPControlViewModel
     @StateObject private var roundTripVM: RoundTripLatencyViewModel
     @State private var publishedAudioDevices: [AudioWrapperDevice] = []
@@ -48,6 +49,8 @@ struct ModernContentView: View {
         _avcReportStore = StateObject(wrappedValue: AvcReportStore(connector: debugViewModel.connector))
         _avcUnitsStore = StateObject(wrappedValue: AvcUnitsStore(connector: debugViewModel.connector))
         _deviceControlsVM = StateObject(wrappedValue: DeviceControlsViewModel(source: debugViewModel.connector))
+        // Keep FF800 flash inspection independent of the generic controls selection.
+        _ff800ControlsVM = StateObject(wrappedValue: DeviceControlsViewModel(source: debugViewModel.connector))
         _mcpVM = StateObject(wrappedValue: ASFWMCPControlViewModel(connector: debugViewModel.connector))
         // A measurement owns the audio device; the app's own driver reads would
         // perturb the timing, so they pause for its duration. Paused: the 2 s
@@ -219,7 +222,7 @@ struct ModernContentView: View {
                 case .deviceControls:
                     DeviceControlsView(model: deviceControlsVM)
                 case .fireface800:
-                    Fireface800SettingsView(controls: deviceControlsVM)
+                    Fireface800SettingsView(controls: ff800ControlsVM)
                 case .avcCommands:
                     AVCCommandView(viewModel: debugVM)
                 case .controller:
