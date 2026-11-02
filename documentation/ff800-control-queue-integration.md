@@ -49,6 +49,24 @@ host tests exercise queries while a device prepare stage is held, after
 reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
 register writes are introduced.
 
+### Read-only bridge from scheduler diagnostics to FF800 preview
+
+`FF800ControlSessionDiagnostics.hpp` now maps an **existing**
+`SessionCoordinationSnapshot` and separately supplied device/route diagnostics
+to the pure FF800 preview policy. The adapter rejects unknown sessions, active
+HAL/stream/reconcile/restart/clock states, retirement, teardown, disconnected
+or stale routes, and **outstanding requested versus completed scheduler tickets**.
+The mapping is exercised against live host-test `AudioSessions` snapshots at
+idle, during a held start stage, while streaming, after StopIO and at retirement.
+
+The caller must supply genuine route/cache facts: the adapter does not read
+the bus, discover nodes, acquire session locks across dispatch, or validate
+cached flash settings. The adapter is **not wired into UI controls, control
+services, or FireWire register writes**. It offers a diagnostic *preview*, not
+a lease or authorization. Snapshot and route facts are not atomic together;
+even a true result is immediately stale and MUST NEVER be used alone to
+dispatch control writes. No FF800 hardware-write enablement is implied.
+
 ### Prototype-only admission gate
 
 `FF800ControlSessionGate.hpp` is a pure policy preview, tested without
