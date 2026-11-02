@@ -231,6 +231,14 @@ final class DeviceControlsViewModel: ObservableObject {
         }
     }
 
+    /// External topology-generation changes invalidate observations immediately.
+    /// This deliberately performs no IPC, registry read, or device operation.
+    func invalidateFF800Diagnostic() {
+        ff800Diagnostic = nil
+        ff800DiagnosticAvailability = source.isConnected
+            ? .staleOrChanged : .driverDisconnected
+    }
+
     func refreshFF800Diagnostic() {
         ff800Diagnostic = nil
         ff800DiagnosticAvailability = .diagnosticUnavailable
