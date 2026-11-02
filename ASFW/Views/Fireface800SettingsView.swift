@@ -222,7 +222,7 @@ struct Fireface800SettingsView: View {
                 if controls.isConnected, let diagnostic = controls.ff800Diagnostic,
                    diagnostic.deviceGuid == controls.selectedGUID {
                     Label(diagnostic.reason.description, systemImage: "info.circle")
-                    Text("Observed scheduler preview: GUID \\(String(format: "0x%016llX", diagnostic.deviceGuid)), bus generation \\(diagnostic.generation). This is a past observation, not continuously monitored. Refresh to query again.")
+                    Text("Observed scheduler preview: GUID \(String(format: "0x%016llX", diagnostic.deviceGuid)), bus generation \(diagnostic.generation). This is a past observation, not continuously monitored. Refresh to query again.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 } else {
