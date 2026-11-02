@@ -19,6 +19,7 @@ struct FF800ControlSessionConditions {
     bool halAttached{false};
     bool streaming{false};
     bool reconciling{false};
+    bool configurationRequested{false};
     bool restartPending{false};
     bool clockChangePending{false};
     bool routeCurrent{false};
@@ -33,7 +34,8 @@ struct FF800ControlSessionConditions {
 CanPreviewFF800ControlSession(const FF800ControlSessionConditions& session) noexcept {
     return session.connected && !session.retired && !session.teardown &&
            !session.halAttached && !session.streaming &&
-           !session.reconciling && !session.restartPending &&
+           !session.reconciling && !session.configurationRequested &&
+           !session.restartPending &&
            !session.clockChangePending && session.routeCurrent &&
            session.cachedGeneration == session.routeGeneration;
 }
