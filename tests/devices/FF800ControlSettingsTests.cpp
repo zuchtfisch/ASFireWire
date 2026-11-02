@@ -280,4 +280,37 @@ TEST(FF800TransportHarnessTests, RefusesPreviousGenerationAfterReset) {
     EXPECT_EQ(sends, 1U);
 }
 
+TEST(FF800WriteStateTests, UnverifiableWriteBlocksNewPreparationUntilReset) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(501, 7, {1, 2, 3}));
+    ASSERT_TRUE(state.Begin(501, 7));
+    ASSERT_TRUE(state.TransportComplete(501, 7, true));
+    ASSERT_TRUE(state.MarkUnverifiable(501, 7));
+    EXPECT_FALSE(state.Prepare(502, 7, {4, 5, 6}));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_EQ(state.RequestId(), 501U);
+    state.Reset(8);
+    EXPECT_TRUE(state.Prepare(502, 8, {4, 5, 6}));
+}
+
+TEST(FF800WriteStateTests, TimeoutBlocksNewPreparationAndLateAck) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(503, 7, {1, 2, 3}));
+    ASSERT_TRUE(state.Begin(503, 7));
+    ASSERT_TRUE(state.Abandon(503, 7, true));
+    EXPECT_FALSE(state.Prepare(504, 7, {4, 5, 6}));
+    EXPECT_FALSE(state.TransportComplete(503, 7, true));
+    EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kTimedOut);
+    EXPECT_FALSE(state.VerifiedImage().has_value());
+}
+
+TEST(FF800WriteStateTests, CancellationBlocksNewPreparation) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(505, 7, {1, 2, 3}));
+    ASSERT_TRUE(state.Abandon(505, 7, false));
+    EXPECT_FALSE(state.Prepare(506, 7, {4, 5, 6}));
+    EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kCancelled);
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kUncertain);
+}
+
 } // namespace
