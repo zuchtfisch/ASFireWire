@@ -37,7 +37,8 @@ public:
     /// externally before issuing another full-register image in production.
     [[nodiscard]] bool Start(FF800WriteEnvelope request) {
         auto& state = shared_->state;
-        if (!dispatch_ || blocked_ || state.Phase() == FF800ControlWritePhase::kUncertain ||
+        if (!dispatch_ || blocked_ || (expectedGeneration_ && request.generation != *expectedGeneration_) ||
+            state.Phase() == FF800ControlWritePhase::kUncertain ||
             state.Phase() == FF800ControlWritePhase::kFailed ||
             !state.Prepare(request.requestId, request.generation, request.words))
             return false;
@@ -58,7 +59,11 @@ public:
         return true;
     }
 
-    void Reset(uint32_t generation) { shared_->state.Reset(generation); blocked_ = false; }
+    void Reset(uint32_t generation) {
+        shared_->state.Reset(generation);
+        expectedGeneration_ = generation;
+        blocked_ = false;
+    }
 
     [[nodiscard]] bool Timeout(uint64_t id, uint32_t generation) {
         const bool changed = shared_->state.Abandon(id, generation, true);
@@ -83,6 +88,7 @@ private:
     std::shared_ptr<Shared> shared_;
     Dispatch dispatch_;
     bool blocked_{false};
+    std::optional<uint32_t> expectedGeneration_{};
 };
 
 } // namespace ASFW::Audio::RME
