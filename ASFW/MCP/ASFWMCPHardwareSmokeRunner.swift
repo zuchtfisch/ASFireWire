@@ -23,13 +23,13 @@ struct ASFWMCPHardwareSmokeOptions: Equatable {
     /// Second gate required for a plan's mutating step.
     var mutatingSmokeEnabled: Bool
 
-    static let disabled = ASFWMCPHardwareSmokeOptions(
+    nonisolated static let disabled = ASFWMCPHardwareSmokeOptions(
         hardwareAccessEnabled: false,
         developerModeEnabled: false,
         mutatingSmokeEnabled: false
     )
 
-    static let readOnly = ASFWMCPHardwareSmokeOptions(
+    nonisolated static let readOnly = ASFWMCPHardwareSmokeOptions(
         hardwareAccessEnabled: true,
         developerModeEnabled: false,
         mutatingSmokeEnabled: false
