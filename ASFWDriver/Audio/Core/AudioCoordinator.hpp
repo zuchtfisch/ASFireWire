@@ -103,6 +103,13 @@ public:
     /// Debug helper: return the GUID if exactly one audio nub is published.
     [[nodiscard]] std::optional<uint64_t> GetSinglePublishedGuid() const noexcept;
 
+    /// Pure read-only observation of an EXISTING audio session. Never creates
+    /// a scheduler, starts/stops a stream, or grants FF800 hardware access.
+    [[nodiscard]] std::optional<Session::SessionCoordinationSnapshot>
+    FF800SessionObservation(uint64_t guid) const noexcept {
+        return sessions_.CoordinationSnapshot(guid);
+    }
+
 private:
     // True when `guid`'s current policy names a family the host serves.
     [[nodiscard]] bool ServedByHost(uint64_t guid) const noexcept;
