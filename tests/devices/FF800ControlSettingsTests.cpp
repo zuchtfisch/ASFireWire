@@ -5,6 +5,7 @@
 #include "Audio/Protocols/RME/FF800ControlWireImage.hpp"
 #include "Audio/Protocols/RME/FF800ControlPreviewGate.hpp"
 #include "Audio/Protocols/RME/FF800ControlSessionGate.hpp"
+#include "Audio/Protocols/RME/FF800SimulatedConfigLease.hpp"
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -679,5 +680,75 @@ TEST(FF800ControlSessionGateTests, RefusesStaleRouteDespiteIdleSession) {
     EXPECT_FALSE(CanPreviewFF800ControlSession(session));
 }
 
+
+[[nodiscard]] FF800ControlSessionConditions IdleFF800SimSession(uint32_t generation = 90) {
+    FF800ControlSessionConditions s{};
+    s.connected = true;
+    s.retired = false;
+    s.teardown = false;
+    s.routeCurrent = true;
+    s.cachedGeneration = generation;
+    s.routeGeneration = generation;
+    return s;
+}
+
+TEST(FF800SimulatedLeaseTests, LeaseExcludesAudioConfigureStartAndStop) {
+    FF800SimulatedConfigLease lease;
+    const auto token = lease.Acquire(IdleFF800SimSession());
+    ASSERT_TRUE(token.has_value());
+    EXPECT_TRUE(lease.Holds(*token));
+    EXPECT_FALSE(lease.Acquire(IdleFF800SimSession()).has_value());
+    EXPECT_FALSE(lease.BeginAudioMutation());
+    ASSERT_TRUE(lease.Release(*token));
+    EXPECT_TRUE(lease.BeginAudioMutation());
+    EXPECT_FALSE(lease.Acquire(IdleFF800SimSession()).has_value());
+    lease.EndAudioMutation();
+    EXPECT_TRUE(lease.Acquire(IdleFF800SimSession()).has_value());
+}
+
+TEST(FF800SimulatedLeaseTests, StaleReleaseCannotUnlockNewOwner) {
+    FF800SimulatedConfigLease lease;
+    const auto old = lease.Acquire(IdleFF800SimSession());
+    ASSERT_TRUE(old.has_value());
+    ASSERT_TRUE(lease.Release(*old));
+    const auto current = lease.Acquire(IdleFF800SimSession());
+    ASSERT_TRUE(current.has_value());
+    EXPECT_NE(*old, *current);
+    EXPECT_FALSE(lease.Release(*old));
+    EXPECT_TRUE(lease.Holds(*current));
+    EXPECT_FALSE(lease.BeginAudioMutation());
+    EXPECT_TRUE(lease.Release(*current));
+}
+
+TEST(FF800SimulatedLeaseTests, BusResetInvalidatesOldTokenEvenWithSameGeneration) {
+    FF800SimulatedConfigLease lease;
+    const auto old = lease.Acquire(IdleFF800SimSession(123));
+    ASSERT_TRUE(old.has_value());
+    lease.Invalidate();
+    EXPECT_FALSE(lease.Holds(*old));
+    const auto fresh = lease.Acquire(IdleFF800SimSession(123));
+    ASSERT_TRUE(fresh.has_value());
+    EXPECT_NE(old->epoch, fresh->epoch);
+    EXPECT_FALSE(lease.Release(*old));
+    EXPECT_TRUE(lease.Holds(*fresh));
+}
+
+TEST(FF800SimulatedLeaseTests, RejectsTransitionsAndStaleRouteBeforeAcquisition) {
+    FF800SimulatedConfigLease lease;
+    auto s = IdleFF800SimSession(5);
+    s.halAttached = true;
+    EXPECT_FALSE(lease.Acquire(s).has_value());
+    s.halAttached = false;
+    s.reconciling = true;
+    EXPECT_FALSE(lease.Acquire(s).has_value());
+    s.reconciling = false;
+    s.restartPending = true;
+    EXPECT_FALSE(lease.Acquire(s).has_value());
+    s.restartPending = false;
+    s.routeGeneration = 6;
+    EXPECT_FALSE(lease.Acquire(s).has_value());
+    s.routeGeneration = 5;
+    EXPECT_TRUE(lease.Acquire(s).has_value());
+}
 
 } // namespace
