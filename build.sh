@@ -352,7 +352,7 @@ strip_ansi() { sed -E 's/\x1B\[[0-9;]*[mK]//g'; }
 extract_errors() {
   # Match typical clang/linker failures & xcodebuild errors, avoid notes
   grep -iE '(^|[[:space:]])error:|^fatal error:|clang: error| ld: (warning|error)|\bfailed with exit code' \
-    | grep -viE 'note:|^error: the following command failed with exit code 0 but produced no further output
+    | grep -viE 'note:|^error: the following command failed with exit code 0 but produced no further output$' || true
 }
 
 extract_warnings() {
