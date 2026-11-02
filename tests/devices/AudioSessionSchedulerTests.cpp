@@ -113,6 +113,7 @@ TEST_F(SchedulerTest, CoordinationSnapshotTracksReconcileWithoutBlockingIt) {
 }
 
 TEST_F(SchedulerTest, CoordinationSnapshotReportsRetirementAndTeardown) {
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
     const auto before = rig.sessions.CoordinationSnapshot(rig.guid);
     ASSERT_TRUE(before.has_value());
     EXPECT_FALSE(before->retired);
