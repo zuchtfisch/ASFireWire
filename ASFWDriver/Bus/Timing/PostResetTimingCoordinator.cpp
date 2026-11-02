@@ -7,7 +7,19 @@
 
 #include "PostResetTimingCoordinator.hpp"
 
+#include <limits>
+
 namespace ASFW::Bus::Timing {
+namespace {
+
+// If a timestamp approaches the uint64_t limit, a wrapping deadline would
+// open a post-reset gate immediately. Saturate instead of wrapping.
+[[nodiscard]] constexpr uint64_t SaturatingDeadline(uint64_t anchor,
+                                                    uint64_t delay) noexcept {
+    constexpr uint64_t max = std::numeric_limits<uint64_t>::max();
+    return anchor > max - delay ? max : anchor + delay;
+}
+} // namespace
 
 void PostResetTimingCoordinator::OnBusResetStarted(uint32_t generation, uint64_t nowNs) noexcept {
     // New reset edge invalidates all prior gates. No Annex H action is permitted
@@ -30,9 +42,9 @@ void PostResetTimingCoordinator::OnSelfIDComplete(uint32_t generation,
     state_.createdAtNs = selfIdCompleteNs;
 
     state_.bmIncumbentAllowedNs = selfIdCompleteNs;
-    state_.bmNonIncumbentAllowedNs = selfIdCompleteNs + kBMNonIncumbentDelayNs;
-    state_.irmFallbackAllowedNs = selfIdCompleteNs + kIRMFallbackDelayNs;
-    state_.newIsoAllocationAllowedNs = selfIdCompleteNs + kNewIsoAllocationDelayNs;
+    state_.bmNonIncumbentAllowedNs = SaturatingDeadline(selfIdCompleteNs, kBMNonIncumbentDelayNs);
+    state_.irmFallbackAllowedNs = SaturatingDeadline(selfIdCompleteNs, kIRMFallbackDelayNs);
+    state_.newIsoAllocationAllowedNs = SaturatingDeadline(selfIdCompleteNs, kNewIsoAllocationDelayNs);
 }
 
 TimingGateResult PostResetTimingCoordinator::MakeMissingStateResult(uint32_t generation,
