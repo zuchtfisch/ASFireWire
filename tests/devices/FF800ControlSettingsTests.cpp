@@ -501,4 +501,56 @@ TEST(FF800ControllerQueueTests, QueuedCallbackAfterDestructionIsHarmless) {
     SUCCEED();
 }
 
+TEST(FF800WriteStateTests, FailedTransportCannotPrepareAgainUntilReset) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(901, 61, {1, 2, 3}));
+    ASSERT_TRUE(state.Begin(901, 61));
+    ASSERT_TRUE(state.TransportComplete(901, 61, false));
+    EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kTransport);
+    EXPECT_FALSE(state.Prepare(902, 61, {4, 5, 6}));
+    EXPECT_EQ(state.RequestId(), 901U);
+    state.Reset(62);
+    EXPECT_TRUE(state.Prepare(903, 62, {4, 5, 6}));
+}
+
+TEST(FF800ControllerQueueTests, CancellationBeforePostedAckCannotReopenWrite) {
+    std::vector<FF800ControlWriteHarness::ControllerTask> pending;
+    FF800ControlWriteHarness harness(
+        [](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion callback) {
+            callback(true);
+        },
+        [&](FF800ControlWriteHarness::ControllerTask task) {
+            pending.push_back(std::move(task));
+        });
+    ASSERT_TRUE(harness.Start({904, 63, {1, 2, 3}}));
+    ASSERT_EQ(pending.size(), 1U);
+    ASSERT_TRUE(harness.Cancel(904, 63));
+    pending.front()();
+    EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kCancelled);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.Start({905, 63, {4, 5, 6}}));
+}
+
+TEST(FF800ControllerQueueTests, QueuedDuplicateAndReorderedResultsAreIgnored) {
+    std::vector<FF800ControlWriteHarness::ControllerTask> pending;
+    FF800ControlWriteHarness::Completion callback;
+    FF800ControlWriteHarness harness(
+        [&](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion completion) {
+            callback = std::move(completion);
+        },
+        [&](FF800ControlWriteHarness::ControllerTask task) {
+            pending.push_back(std::move(task));
+        });
+    ASSERT_TRUE(harness.Start({906, 64, {1, 2, 3}}));
+    callback(false);
+    callback(true);
+    ASSERT_EQ(pending.size(), 2U);
+    pending[1]();
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    pending[0]();
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+    EXPECT_FALSE(harness.Start({907, 64, {4, 5, 6}}));
+}
+
 } // namespace
