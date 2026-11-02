@@ -129,6 +129,58 @@ TEST_F(SchedulerTest, FF800DiagnosticAdapterRefusesRetirementAndOutstandingTicke
     EXPECT_FALSE(CanPreviewFF800FromSnapshot(rig.sessions.CoordinationSnapshot(rig.guid), route));
 }
 
+// Read-only checks must follow current audio ownership, including the stop
+// transition. A snapshot taken before the stop is not a configuration lease.
+TEST_F(SchedulerTest, FF800DiagnosticAdapterRejectsStopInFlight) {
+    using namespace ASFW::Audio::RME;
+    const FF800ControlRouteDiagnostics route{true, true, 301, 301};
+    ASSERT_EQ(rig.sessions.Attach(rig.guid), kIOReturnSuccess);
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(rig.sessions.CoordinationSnapshot(rig.guid), route));
+    Hold("device.stop");
+    auto stop = std::async(std::launch::async, [&] { return rig.sessions.Detach(rig.guid); });
+    WaitHeld();
+    const auto stopping = rig.sessions.CoordinationSnapshot(rig.guid);
+    EXPECT_TRUE(stopping.has_value());
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(stopping, route));
+    if (stopping) EXPECT_TRUE(stopping->reconciling || stopping->configurationRequested);
+    Release();
+    EXPECT_EQ(stop.get(), kIOReturnSuccess);
+    EXPECT_TRUE(CanPreviewFF800FromSnapshot(rig.sessions.CoordinationSnapshot(rig.guid), route));
+}
+
+// Even a previously eligible idle snapshot cannot overcome a bus reset:
+// the route's current-ness and generation must be independently revalidated.
+TEST_F(SchedulerTest, FF800DiagnosticAdapterRejectsBusResetWithPreviouslyIdleSnapshot) {
+    using namespace ASFW::Audio::RME;
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
+    const auto idle = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(idle.has_value());
+    const FF800ControlRouteDiagnostics originalRoute{true, true, 401, 401};
+    EXPECT_TRUE(CanPreviewFF800FromSnapshot(idle, originalRoute));
+    rig.registry.InvalidateLiveMappingsForBusReset();
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(idle, {true, false, 401, 401}));
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(idle, {true, true, 401, 402}));
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(
+        rig.sessions.CoordinationSnapshot(rig.guid), {false, false, 401, 402}));
+    // Supplying old route facts would still produce a positive *preview*:
+    // this proves the adapter is not a race-free permit or hardware gate.
+    EXPECT_TRUE(CanPreviewFF800FromSnapshot(idle, originalRoute));
+}
+
+// Teardown is an independent cancellation signal; it must veto a previously
+// quiescent session without waiting for any reconcile or hardware I/O.
+TEST_F(SchedulerTest, FF800DiagnosticAdapterRejectsTeardownAfterIdle) {
+    using namespace ASFW::Audio::RME;
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
+    const FF800ControlRouteDiagnostics route{true, true, 501, 501};
+    EXPECT_TRUE(CanPreviewFF800FromSnapshot(rig.sessions.CoordinationSnapshot(rig.guid), route));
+    rig.cancel.store(true, std::memory_order_release);
+    const auto shutdown = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(shutdown.has_value());
+    EXPECT_TRUE(shutdown->teardown);
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(shutdown, route));
+}
+
 TEST_F(SchedulerTest, CoordinationQueryDoesNotCreateAnUnknownSession) {
     // Read-only diagnostics must not allocate an audio session for an
     // unrelated/unknown GUID.
