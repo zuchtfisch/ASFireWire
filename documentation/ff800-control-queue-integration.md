@@ -49,6 +49,26 @@ host tests exercise queries while a device prepare stage is held, after
 reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
 register writes are introduced.
 
+### Swift diagnostic viewer (read-only)
+
+The macOS connector now calls UserClient selector 84 with two GUID scalar
+words, requires exactly 64 output bytes and decodes the v1 little-endian
+envelope. The decoder checks ABI version, size, status, reason, GUID,
+nonzero timestamp, known-session/current-route flags and reserved fields.
+It also requires both wire generation fields to match the generation
+obtained from **separate** app-side device discovery. The viewmodel reads
+discovery before and after the IPC and refuses a changed generation or
+node ID. It clears previously displayed diagnostic data on refresh and
+selection changes, and never polls in the background.
+
+The FF800 settings screen labels any accepted record as a **past
+scheduler observation**. A bus reset may occur immediately after the
+checks: neither this display nor the generation equality is a guarantee
+of present device state. A disconnected driver, invalid wire record,
+missing session, or mismatched discovery falls back to
+"unavailable or stale". This UI cannot read phantom-power voltage or
+send hardware control writes. The apply button remains disabled.
+
 ### Live read-only scheduler observation (not a write permit)
 
 Selector 84 now attempts to obtain a **live diagnostic** by reading existing
@@ -81,9 +101,10 @@ and zero device/timestamp/generation values whenever the live route or
 session cannot be validated**. This is a functional, read-only IPC envelope with best-effort live session
 and route observations. It is not a race-free device state feed. The method never creates a session,
 takes an audio configuration lease, accesses the bus, or authorizes a write.
-The Swift UI still states that live FF800 diagnostics are unavailable because
-it has not been wired to method 84.
-Future work must add a Swift decoder and independent app-side freshness checks.
+The Swift UI consumes selector 84 but labels it as a past observation,
+not continuously current hardware state.
+The Swift decoder and independent discovery checks are now implemented;
+stronger publication/invalidation semantics remain future work.
 
 ### Versioned, non-operational diagnostic wire contract
 
