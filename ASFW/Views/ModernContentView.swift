@@ -219,7 +219,7 @@ struct ModernContentView: View {
                 case .deviceControls:
                     DeviceControlsView(model: deviceControlsVM)
                 case .fireface800:
-                    Fireface800SettingsView()
+                    Fireface800SettingsView(controls: deviceControlsVM)
                 case .avcCommands:
                     AVCCommandView(viewModel: debugVM)
                 case .controller:
