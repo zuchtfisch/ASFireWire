@@ -29,7 +29,9 @@ enum class FF800ControlWriteFailure : uint8_t {
     kStaleRequest,
     kTransport,
     kReset,
-    kVerificationMismatch
+    kVerificationMismatch,
+    kCancelled,
+    kTimedOut
 };
 
 /// A one-command-at-a-time, generation-scoped protocol state machine.
@@ -106,6 +108,24 @@ public:
         if (!Matches(requestId, generation) || phase_ != FF800ControlWritePhase::kTransportAccepted)
             return false;
         phase_ = FF800ControlWritePhase::kUncertain;
+        candidate_.reset();
+        return true;
+    }
+
+    /// Completion may never arrive (timeouts, app disconnect, teardown).
+    /// Cancel an unresolved request and prevent a late transport callback from
+    /// making it look successful. Timed-out writes are NOT safe to retry
+    /// automatically: the hardware might still have accepted the payload.
+    [[nodiscard]] bool Abandon(uint64_t requestId, uint32_t generation,
+                               bool timedOut) noexcept {
+        if (!Matches(requestId, generation) ||
+            (phase_ != FF800ControlWritePhase::kPrepared &&
+             phase_ != FF800ControlWritePhase::kInFlight &&
+             phase_ != FF800ControlWritePhase::kTransportAccepted))
+            return false;
+        phase_ = FF800ControlWritePhase::kUncertain;
+        failure_ = timedOut ? FF800ControlWriteFailure::kTimedOut
+                            : FF800ControlWriteFailure::kCancelled;
         candidate_.reset();
         return true;
     }
