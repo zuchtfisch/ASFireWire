@@ -69,19 +69,17 @@ BuildFF800DiagnosticV1(
     return result;
 }
 
-/// Structural validation only. Cannot prove the snapshot is still current.
-/// expectedGuid and expectedGeneration must come from an independently
-/// established device/route context, not from this response itself.
+/// Structural validation only. Preserve a valid *diagnostic* even when
+/// the route is stale so the UI can explain why it was rejected. This does
+/// not prove freshness, authorization, or actual FF800 hardware state.
 [[nodiscard]] constexpr bool
 ValidFF800DiagnosticV1(const ASFWFF800SessionDiagV1& value,
-                       uint64_t expectedGuid, uint32_t expectedGeneration) noexcept {
+                       uint64_t expectedGuid) noexcept {
     if (expectedGuid == 0 || value.abiVersion != ASFW_FF800_SESSION_DIAG_ABI_VERSION ||
         value.structSize != sizeof(value) ||
         value.status != ASFWFF800SessionDiagValid ||
         value.deviceGuid != expectedGuid || value.timestampNs == 0 ||
-        value.sessionKnown != 1 || value.routeCurrent != 1 ||
-        value.cachedGeneration != expectedGeneration ||
-        value.routeGeneration != expectedGeneration ||
+        value.sessionKnown != 1 || value.routeCurrent > 1 ||
         value.reason < ASFWFF800SessionDiagEligiblePreviewOnly ||
         value.reason > ASFWFF800SessionDiagGenerationMismatch) {
         return false;
@@ -90,6 +88,18 @@ ValidFF800DiagnosticV1(const ASFWFF800SessionDiagV1& value,
         if (field != 0) return false;
     }
     return true;
+}
+
+/// Independent generation check for freshness *classification*, not write
+/// authorization. A matching integer alone cannot rule out a bus-reset race.
+[[nodiscard]] constexpr bool
+FF800DiagnosticRouteMatchesGeneration(const ASFWFF800SessionDiagV1& value,
+                                      uint64_t expectedGuid,
+                                      uint32_t expectedGeneration) noexcept {
+    return ValidFF800DiagnosticV1(value, expectedGuid) &&
+           value.routeCurrent == 1 &&
+           value.cachedGeneration == expectedGeneration &&
+           value.routeGeneration == expectedGeneration;
 }
 
 } // namespace ASFW::Audio::RME
