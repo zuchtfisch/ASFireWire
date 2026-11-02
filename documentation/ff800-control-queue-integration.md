@@ -49,6 +49,27 @@ host tests exercise queries while a device prepare stage is held, after
 reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
 register writes are introduced.
 
+### Versioned, non-operational diagnostic wire contract
+
+`ASFWDriver/Shared/ASFWFF800SessionDiagnosticsABI.h` declares a standalone
+C-compatible `ASFWFF800SessionDiagV1` (64 bytes) with a version/size envelope,
+status, reason, device GUID, observation timestamp, cached/route generation,
+session presence, route-current flag and reserved zero fields.
+`FF800SessionDiagnosticWire.hpp` maps existing session/route *observations*
+to that structure and validates it without I/O. The diagnostic validator
+rejects wrong versions, sizes, GUIDs, missing timestamps/sessions, invalid
+reasons/flags and nonzero reserved fields. Route freshness classification is
+separate: it must compare against an independently supplied expected bus
+generation. Matching generations do **not** make an observation race-free.
+
+**Not connected to DriverKit IPC:** no method selector, handler, UserClient
+memory copy, driver publication, Swift decoder, or live UI update is part of
+this step. The Fireface 800 view continues to say that session diagnostics are
+unavailable and only lists blocker codes as reference. The standalone v1
+structure is a proposed contract for future read-only plumbing, not evidence
+that those measurements exist in a running driver. Nothing grants access to
+the FF800 write-only 0x0000fc88f014 register.
+
 ### Fireface 800 app presentation (reference-only)
 
 `Fireface800SettingsView` shows a read-only panel listing the stable
