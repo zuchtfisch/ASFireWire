@@ -233,7 +233,7 @@ MethodDispatchResult DispatchAVCMethods(ASFW::UserClient::UserClientRuntimeState
     case kMethodGetControlSnapshot:
         return runtimeState.Controls().GetControlSnapshot(arguments);
     case kMethodGetFF800SessionDiagnostic:
-        return runtimeState.Controls().GetFF800SessionDiagnostic(arguments);
+        return runtimeState.Controls().GetFF800SessionDiagnostic(arguments, &driver);
     case kMethodSetControlParameter:
         return runtimeState.Controls().SetControlParameter(arguments);
     case kMethodSetControlRoute:
