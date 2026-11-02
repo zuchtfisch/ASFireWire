@@ -136,4 +136,25 @@ TEST(FF800WriteStateTests, TransportFailureDoesNotUpdateState) {
     EXPECT_FALSE(state.VerifiedImage().has_value());
 }
 
+TEST(FF800WriteStateTests, TimeoutCannotBecomeSuccessFromLateCallback) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(201, 10, ConfigWords{1, 2, 3}));
+    ASSERT_TRUE(state.Begin(201, 10));
+    ASSERT_TRUE(state.Abandon(201, 10, true));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kTimedOut);
+    EXPECT_FALSE(state.TransportComplete(201, 10, true));
+    EXPECT_FALSE(state.VerifyCompleteImage(201, 10, ConfigWords{1, 2, 3}));
+    EXPECT_FALSE(state.VerifiedImage().has_value());
+}
+
+TEST(FF800WriteStateTests, CancelledPreparedRequestCannotBeSent) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(202, 10, ConfigWords{1, 2, 3}));
+    ASSERT_TRUE(state.Abandon(202, 10, false));
+    EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kCancelled);
+    EXPECT_FALSE(state.Begin(202, 10));
+    EXPECT_FALSE(state.VerifiedImage().has_value());
+}
+
 } // namespace
