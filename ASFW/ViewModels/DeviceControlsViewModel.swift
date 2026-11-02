@@ -61,6 +61,30 @@ final class DeviceControlsViewModel: ObservableObject {
         case failed(String)
     }
 
+    enum FF800DiagnosticAvailability: Equatable {
+        case notChecked
+        case driverDisconnected
+        case noDeviceSelected
+        case deviceNotIdentified
+        case driverDoesNotSupportDiagnostic
+        case diagnosticUnavailable
+        case staleOrChanged
+        case observationAvailable
+
+        var message: String {
+            switch self {
+            case .notChecked: "Session diagnostic not queried"
+            case .driverDisconnected: "Driver disconnected — diagnostic unavailable"
+            case .noDeviceSelected: "No device selected"
+            case .deviceNotIdentified: "Selected device not positively identified as a ready FF800"
+            case .driverDoesNotSupportDiagnostic: "Connected driver does not support FF800 diagnostic selector 84"
+            case .diagnosticUnavailable: "Session diagnostic unavailable or invalid"
+            case .staleOrChanged: "Device route or identity changed during diagnostic read"
+            case .observationAvailable: "Past scheduler observation available"
+            }
+        }
+    }
+
     static let staleRevisionMessage = "The device was rediscovered; try again."
 
     @Published private(set) var devices: [Device] = []
@@ -72,6 +96,7 @@ final class DeviceControlsViewModel: ObservableObject {
     /// Best-effort, read-only preview diagnosis. Invalidated on every refresh
     /// or selection change; never retained as hardware or write-admission state.
     @Published private(set) var ff800Diagnostic: FF800SessionDiagnostic?
+    @Published private(set) var ff800DiagnosticAvailability: FF800DiagnosticAvailability = .notChecked
 
 
     private let source: any DeviceControlsSource
@@ -109,6 +134,7 @@ final class DeviceControlsViewModel: ObservableObject {
     /// Re-read the device list (the AV/C units the driver knows) and the selected device's snapshot.
     func reload() {
         ff800Diagnostic = nil
+        ff800DiagnosticAvailability = .notChecked
         guard source.isConnected else {
             devices = []
             writeStates = [:]
@@ -134,6 +160,7 @@ final class DeviceControlsViewModel: ObservableObject {
 
     func select(_ guid: UInt64?) {
         ff800Diagnostic = nil
+        ff800DiagnosticAvailability = .notChecked
         if guid != selectedGUID {
             writeStates = [:]
             lastChangeSequence = [:]
@@ -147,7 +174,6 @@ final class DeviceControlsViewModel: ObservableObject {
     /// Read the selected device's snapshot. Write states of parameters that no
     /// longer exist are dropped; a failure stays on its control until the next write.
     func refreshSnapshot() {
-        ff800Diagnostic = nil
         refreshFF800Diagnostic()
         guard source.isConnected else {
             writeStates = [:]
@@ -206,19 +232,43 @@ final class DeviceControlsViewModel: ObservableObject {
 
     func refreshFF800Diagnostic() {
         ff800Diagnostic = nil
-        guard source.isConnected, let guid = selectedGUID, guid != 0,
-              let before = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
-              Self.isIdentifiedFF800(before)
-        else { return }
-        guard case .success(let bytes) = source.getFF800SessionDiagnostic(guid: guid),
-              let after = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
+        ff800DiagnosticAvailability = .diagnosticUnavailable
+        guard source.isConnected else {
+            ff800DiagnosticAvailability = .driverDisconnected
+            return
+        }
+        guard let guid = selectedGUID, guid != 0 else {
+            ff800DiagnosticAvailability = .noDeviceSelected
+            return
+        }
+        guard let before = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
+              Self.isIdentifiedFF800(before) else {
+            ff800DiagnosticAvailability = .deviceNotIdentified
+            return
+        }
+        let bytes: Data
+        switch source.getFF800SessionDiagnostic(guid: guid) {
+        case .success(let reply):
+            bytes = reply
+        case .failure(let error):
+            ff800DiagnosticAvailability = error.isUnsupported
+                ? .driverDoesNotSupportDiagnostic : .diagnosticUnavailable
+            return
+        }
+        guard let after = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
               Self.isIdentifiedFF800(after),
               before.generation == after.generation,
-              before.nodeId == after.nodeId,
-              let diagnostic = FF800SessionDiagnostic.decode(
-                  bytes, guid: guid, discoveryGeneration: after.generation)
-        else { return }
+              before.nodeId == after.nodeId else {
+            ff800DiagnosticAvailability = .staleOrChanged
+            return
+        }
+        guard let diagnostic = FF800SessionDiagnostic.decode(
+            bytes, guid: guid, discoveryGeneration: after.generation) else {
+            ff800DiagnosticAvailability = .diagnosticUnavailable
+            return
+        }
         ff800Diagnostic = diagnostic
+        ff800DiagnosticAvailability = .observationAvailable
     }
 
     // MARK: Writing
