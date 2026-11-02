@@ -3,8 +3,9 @@ import Foundation
 enum ASFWMCPTestGate {
     static func evaluate<Driver: ASFWDriverControlling>(
         core: ASFWMCPCore<Driver>,
-        smokePlan: ASFWMCPHardwareSmokePlan = ASFWMCPHardwareSmokeHarness.defaultPlan()
+        smokePlan: ASFWMCPHardwareSmokePlan? = nil
     ) async -> ASFWMCPTestGateResult {
+        let smokePlan = smokePlan ?? ASFWMCPHardwareSmokeHarness.defaultPlan()
         var checks: [ASFWMCPTestGateCheck] = []
 
         let tools = await core.listTools()
