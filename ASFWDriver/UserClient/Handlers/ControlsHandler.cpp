@@ -6,6 +6,11 @@
 #include "ControlsHandler.hpp"
 #include "../../Audio/Controls/ControlService.hpp"
 #include "../../Audio/Protocols/RME/FF800SessionDiagnosticWire.hpp"
+#include "../../Audio/Core/AudioCoordinator.hpp"
+#include "../../DeviceProfiles/Audio/AudioDeviceIds.hpp"
+#include "../../Service/DriverContext.hpp"
+#include "ASFWDriver.h"
+#include <time.h>
 #include "../../Audio/Controls/CoreAudioProjection.hpp"
 
 #include "../WireFormats/AVCDiscoveryDocument.hpp"
@@ -90,15 +95,48 @@ std::optional<AM::ParameterValue> DecodeValue(uint64_t kind, uint64_t bits) {
 
 } // namespace
 
-kern_return_t ControlsHandler::GetFF800SessionDiagnostic(IOUserClientMethodArguments* args) {
-    // The live audio-session and route owners are not yet exposed here.
-    // Never invent a success or generate a session simply to answer IPC.
+kern_return_t ControlsHandler::GetFF800SessionDiagnostic(IOUserClientMethodArguments* args,
+                                                         const ASFWDriver* driver) {
+    // Strictly observational: no Ensure(), backend call, FireWire transaction,
+    // configuration lease or synchronization with the audio scheduler's IO.
     if (!args || !args->scalarInput || args->scalarInputCount != 2) {
         return kIOReturnBadArgument;
     }
-    if (GuidOf(args) == 0) return kIOReturnBadArgument;
+    const uint64_t guid = GuidOf(args);
+    if (guid == 0) return kIOReturnBadArgument;
 
-    const auto envelope = Audio::RME::FF800UnavailableDiagnosticV1();
+    auto envelope = Audio::RME::FF800UnavailableDiagnosticV1();
+    const auto* context = driver
+        ? static_cast<const ServiceContext*>(driver->GetServiceContext()) : nullptr;
+    if (context && context->audioCoordinator && context->deps.deviceRegistry) {
+        auto& registry = *context->deps.deviceRegistry;
+        const auto record = registry.SnapshotByGuid(guid);
+        const auto route = registry.CurrentRoute(guid);
+        namespace IDs = ASFW::DeviceProfiles::Audio;
+        // FF400 and FF800 share a root model ID. The unit version is the
+        // distinguishing evidence; never label an FF400 as FF800.
+        const auto* unit = record
+            ? record->FindUnitBySpecifier(IDs::kRmeUnitSpecifierId) : nullptr;
+        if (record && route && unit &&
+            record->vendorId == IDs::kRmeVendorId &&
+            unit->version == IDs::kRmeFireface800UnitVersion &&
+            record->quarantineReason == ASFW::Discovery::QuarantineReason::None &&
+            registry.IsCurrent(*route)) {
+            const auto session = context->audioCoordinator->FF800SessionObservation(guid);
+            // A session snapshot is useful for diagnosis but never sufficient
+            // for authorization. Recheck route ownership after the snapshot.
+            if (session && registry.IsCurrent(*route)) {
+                timespec now{};
+                if (clock_gettime(CLOCK_MONOTONIC, &now) == 0 && now.tv_sec >= 0) {
+                    const uint64_t ns = static_cast<uint64_t>(now.tv_sec) * 1'000'000'000ULL +
+                                        static_cast<uint64_t>(now.tv_nsec);
+                    envelope = Audio::RME::BuildFF800DiagnosticV1(
+                        guid, ns, session,
+                        {true, true, route->generation, route->generation});
+                }
+            }
+        }
+    }
     OSData* data = OSData::withBytes(&envelope, static_cast<uint32_t>(sizeof(envelope)));
     if (!data) return kIOReturnNoMemory;
     args->structureOutput = data;
