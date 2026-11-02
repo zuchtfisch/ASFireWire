@@ -12,6 +12,7 @@
 #include <gtest/gtest.h>
 
 #include "SessionTestSupport.hpp"
+#include "Audio/Protocols/RME/FF800ControlSessionDiagnostics.hpp"
 
 #include "Bus/IRM/IRMTypes.hpp"
 
@@ -82,6 +83,51 @@ private:
 using SchedulerTest = ShapedSchedulerTest<kCmpDevice>;
 using ApogeeTest = ShapedSchedulerTest<kApogeeDevice>;
 using DiceQuietPeriodTest = ShapedSchedulerTest<kDiceDevice>;
+
+TEST_F(SchedulerTest, FF800DiagnosticAdapterRejectsUnknownSessionAndStaleRoute) {
+    using namespace ASFW::Audio::RME;
+    const FF800ControlRouteDiagnostics route{true, true, 41, 41};
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(std::nullopt, route));
+
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
+    const auto snapshot = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(snapshot.has_value());
+    EXPECT_TRUE(CanPreviewFF800FromSnapshot(snapshot, route)); // preview, never write
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(snapshot, {true, false, 41, 41}));
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(snapshot, {true, true, 40, 41}));
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(snapshot, {false, true, 41, 41}));
+}
+
+TEST_F(SchedulerTest, FF800DiagnosticAdapterRefusesPendingAudioStartAndRunningStream) {
+    using namespace ASFW::Audio::RME;
+    const FF800ControlRouteDiagnostics route{true, true, 55, 55};
+    Hold("device.prepare");
+    auto start = std::async(std::launch::async, [&] { return rig.sessions.Attach(rig.guid); });
+    WaitHeld();
+    const auto inFlight = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(inFlight.has_value());
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(inFlight, route));
+    EXPECT_TRUE(FF800PreviewConditionsFromSnapshot(inFlight, route).configurationRequested);
+    Release();
+    ASSERT_EQ(start.get(), kIOReturnSuccess);
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(rig.sessions.CoordinationSnapshot(rig.guid), route));
+    EXPECT_EQ(rig.Stop(), kIOReturnSuccess);
+    EXPECT_TRUE(CanPreviewFF800FromSnapshot(rig.sessions.CoordinationSnapshot(rig.guid), route));
+}
+
+TEST_F(SchedulerTest, FF800DiagnosticAdapterRefusesRetirementAndOutstandingTicket) {
+    using namespace ASFW::Audio::RME;
+    const FF800ControlRouteDiagnostics route{true, true, 78, 78};
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
+    const auto idle = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(idle.has_value());
+    auto outstanding = *idle;
+    outstanding.configurationRequested = false;
+    outstanding.requestedTicket = outstanding.completedTicket + 1;
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(outstanding, route));
+    rig.sessions.Retire(rig.guid);
+    EXPECT_FALSE(CanPreviewFF800FromSnapshot(rig.sessions.CoordinationSnapshot(rig.guid), route));
+}
 
 TEST_F(SchedulerTest, CoordinationQueryDoesNotCreateAnUnknownSession) {
     // Read-only diagnostics must not allocate an audio session for an
