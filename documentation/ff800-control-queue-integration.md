@@ -250,6 +250,34 @@ while waiting for a device response. Without reliable full-image verification,
 real FF800 setting writes must stay disabled even if this concurrency blocker
 is eventually solved.
 
+## Local app-to-driver connection prerequisite (November 2026)
+
+A host with an already activated `net.asfw.driver` (0.6.0/33)
+and a registered RME Fireface 800 audio nub still rejected the unsigned
+Debug prototype app at UserClient open time. System logs showed:
+
+```text
+DK: ASFWDriverUserClient:UC failed userclient-access check, needed bundle ID net.asfw.driver
+DK: ASFWDriverUserClient:UC entitlements check failed
+sysextd: Team ID of <..none..>
+```
+
+The prototype executable reported `Signature=adhoc`,
+`TeamIdentifier=not set`, and `Identifier=ASFW`. Local keychain
+inspection reported `0 valid identities found`. The source entitlement
+`com.apple.developer.driverkit.userclient-access` includes
+`net.asfw.driver`, but declaring a plist value in source cannot replace
+valid, authorized code signing. This is a confirmed UserClient entitlement
+denial, **not** a failure of FF800 ROM identification or selector 84.
+Selector 84 has not been exercised against the running driver from this app.
+
+Run `bash tools/ff800-connection-preflight.sh` for a **read-only**
+check of installed extension, IOKit device presence, embedded app
+entitlements, signature, and available signing identities. The script
+does not sign, install, activate, modify system policy, or access FireWire.
+A successful live test requires an appropriately signed and authorized
+app; keep the existing active driver untouched and do not change SIP.
+
 ## Required controller-queue contract before any real integration
 
 1. Run preview/baseline checks, request preparation, dispatch ownership, timeout
