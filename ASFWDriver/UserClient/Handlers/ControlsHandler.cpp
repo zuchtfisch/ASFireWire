@@ -10,7 +10,6 @@
 #include "../../DeviceProfiles/Audio/AudioDeviceIds.hpp"
 #include "../../Service/DriverContext.hpp"
 #include "ASFWDriver.h"
-#include <mach/mach_time.h>
 #include "../../Audio/Controls/CoreAudioProjection.hpp"
 
 #include "../WireFormats/AVCDiscoveryDocument.hpp"
