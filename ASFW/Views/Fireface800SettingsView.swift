@@ -214,23 +214,31 @@ struct Fireface800SettingsView: View {
         }
     }
 
-    // The C++ FF800PreviewBlockReason policy is not yet exposed through the
-    // driver/user-client snapshot. Do not infer live scheduler state from cached
-    // flash settings or from the user's draft controls.
+    // Selector 84 is a read-only best-effort observation, not live FF800
+    // register state. The snapshot can become stale immediately after receipt.
     private var previewDiagnosticsSection: some View {
         GroupBox("FF800 control preview diagnostics (read only)") {
             VStack(alignment: .leading, spacing: 10) {
-                Label(
-                    controls.isConnected
-                        ? "Session diagnostic unavailable"
-                        : "Driver disconnected — session diagnostic unavailable",
-                    systemImage: "info.circle"
-                )
-                .foregroundStyle(.secondary)
-
-                Text("No live FF800 session-admission reason is exposed by the driver to this screen. The codes below describe possible diagnostic outcomes; they are not current device measurements or hardware write permissions.")
+                if controls.isConnected, let diagnostic = controls.ff800Diagnostic,
+                   diagnostic.deviceGuid == controls.selectedGUID {
+                    Label(diagnostic.reason.description, systemImage: "info.circle")
+                    Text("Observed scheduler preview: GUID \\(String(format: "0x%016llX", diagnostic.deviceGuid)), bus generation \\(diagnostic.generation). This is a past observation, not continuously monitored. Refresh to query again.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                } else {
+                    Label(
+                        controls.isConnected
+                            ? "Session diagnostic unavailable or stale"
+                            : "Driver disconnected — session diagnostic unavailable",
+                        systemImage: "info.circle"
+                    )
+                    .foregroundStyle(.secondary)
+                }
+                Text("This read-only preview checks scheduler and route observations only. The result is not a live hardware measurement and never grants permission to write FF800 registers.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
+                Button("Refresh session diagnostic") { controls.refreshFF800Diagnostic() }
+                    .disabled(!controls.isConnected || controls.selectedGUID == nil)
 
                 DisclosureGroup("Possible blocking reasons (reference only)") {
                     VStack(alignment: .leading, spacing: 7) {
