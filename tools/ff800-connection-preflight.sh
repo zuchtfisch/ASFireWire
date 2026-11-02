@@ -26,7 +26,7 @@ echo
 echo "=== IOKit driver and FF800 registration ==="
 # Restrict to the relevant property lines; no IOKit client is opened.
 ioreg -r -c ASFWDriver -l 2>&1 |
-  grep -E '(^[[:space:]|+\\-]*[+]?-o ASFWDriver|"IOUserClass" = "ASFWDriver"|"ASFWDeviceName" = "RME Fireface 800"|"ASFWGUID" =)' |
+  grep -E '(ASFWDriver[[:space:]]+<class|"IOUserClass" = "ASFWDriver"|"ASFWDeviceName" = "RME Fireface 800"|"ASFWGUID" =)' |
   head -n 30 || true
 
 echo
