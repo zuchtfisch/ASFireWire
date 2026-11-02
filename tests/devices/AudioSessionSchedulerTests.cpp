@@ -83,6 +83,49 @@ using SchedulerTest = ShapedSchedulerTest<kCmpDevice>;
 using ApogeeTest = ShapedSchedulerTest<kApogeeDevice>;
 using DiceQuietPeriodTest = ShapedSchedulerTest<kDiceDevice>;
 
+TEST_F(SchedulerTest, CoordinationQueryDoesNotCreateAnUnknownSession) {
+    // Read-only diagnostics must not allocate an audio session for an
+    // unrelated/unknown GUID.
+    EXPECT_FALSE(rig.sessions.CoordinationSnapshot(rig.guid ^ 0x123456ULL).has_value());
+}
+
+TEST_F(SchedulerTest, CoordinationSnapshotTracksReconcileWithoutBlockingIt) {
+    Hold("device.prepare");
+    auto start = std::async(std::launch::async, [&] { return rig.sessions.Attach(rig.guid); });
+    WaitHeld();
+    const auto pending = rig.sessions.CoordinationSnapshot(rig.guid);
+    EXPECT_TRUE(pending.has_value());
+    if (pending) {
+        EXPECT_TRUE(pending->reconciling);
+        EXPECT_TRUE(pending->configurationRequested);
+        EXPECT_TRUE(pending->halAttached);
+        EXPECT_GT(pending->requestedTicket, pending->completedTicket);
+    }
+    Release();
+    EXPECT_EQ(start.get(), kIOReturnSuccess);
+    const auto running = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(running.has_value());
+    EXPECT_FALSE(running->reconciling);
+    EXPECT_FALSE(running->configurationRequested);
+    EXPECT_TRUE(running->streaming);
+    EXPECT_EQ(running->requestedTicket, running->completedTicket);
+    EXPECT_EQ(rig.Stop(), kIOReturnSuccess);
+}
+
+TEST_F(SchedulerTest, CoordinationSnapshotReportsRetirementAndTeardown) {
+    const auto before = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(before.has_value());
+    EXPECT_FALSE(before->retired);
+    rig.sessions.Retire(rig.guid);
+    const auto retired = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(retired.has_value());
+    EXPECT_TRUE(retired->retired);
+    rig.cancel.store(true, std::memory_order_release);
+    const auto shutdown = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(shutdown.has_value());
+    EXPECT_TRUE(shutdown->teardown);
+}
+
 TEST_F(SchedulerTest, ConfirmationWaitsForProducerTimingAfterBothHostStarts) {
     Device().readinessPolicy = {.requireTransmitTiming = true};
     auto start = std::async(std::launch::async, [&] { return rig.Start(); });
