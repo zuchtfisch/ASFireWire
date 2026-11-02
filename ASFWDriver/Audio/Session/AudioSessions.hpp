@@ -76,6 +76,10 @@ public:
     // Service teardown, or the device retired: device work must not start.
     [[nodiscard]] bool IsCancelled(uint64_t guid) const noexcept;
     [[nodiscard]] std::optional<SessionSnapshot> Snapshot(uint64_t guid) const noexcept;
+    /// Existing sessions only; does not create or modify a device session.
+    /// The result is diagnostic, NOT atomic write admission.
+    [[nodiscard]] std::optional<SessionCoordinationSnapshot>
+    CoordinationSnapshot(uint64_t guid) const noexcept;
     [[nodiscard]] uint64_t TeardownAbortCount() const noexcept {
         return teardownAborts_.load(std::memory_order_acquire);
     }
