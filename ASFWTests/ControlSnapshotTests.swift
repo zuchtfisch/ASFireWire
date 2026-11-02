@@ -768,6 +768,27 @@ struct FF800SessionDiagnosticWireTests {
         #expect(driver.writes.isEmpty)
     }
 
+    @Test func topologyChangeInvalidatesWithoutQueryingOrWriting() {
+        let driver = FakeControlsDriver()
+        driver.discoveryReplies = [[discovered()]]
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+        model.select(guid)
+        #expect(model.ff800Diagnostic?.reason == .streaming)
+        let reads = driver.diagnosticReads
+        model.invalidateFF800Diagnostic()
+        #expect(model.ff800Diagnostic == nil)
+        #expect(model.ff800DiagnosticAvailability == .staleOrChanged)
+        #expect(driver.diagnosticReads == reads)
+        #expect(driver.writes.isEmpty)
+        #expect(driver.polls == 0)
+
+        driver.isConnected = false
+        model.invalidateFF800Diagnostic()
+        #expect(model.ff800DiagnosticAvailability == .driverDisconnected)
+        #expect(driver.diagnosticReads == reads)
+    }
+
     @Test func availabilityExplainsNoSelectionAndDisconnectedDriver() {
         let driver = FakeControlsDriver()
         let model = DeviceControlsViewModel(source: driver)
