@@ -19,6 +19,7 @@
 #include "../../Audio/Controls/ControlService.hpp"
 
 struct IOUserClientMethodArguments;
+class ASFWDriver;
 
 namespace ASFW::Protocols::AVC {
 class IAVCDiscovery;
@@ -44,7 +45,8 @@ public:
     /// Read-only FF800 diagnostic ABI v1. Currently returns an explicit
     /// unavailable envelope; it neither creates sessions nor accesses the bus.
     /// scalarInput: guidHi, guidLo. structureOutput: 64-byte v1 envelope.
-    kern_return_t GetFF800SessionDiagnostic(IOUserClientMethodArguments* args);
+    kern_return_t GetFF800SessionDiagnostic(IOUserClientMethodArguments* args,
+                                             const ASFWDriver* driver);
 
     /// scalarInput: guidHi, guidLo, revision, parameterId, valueKind, valueBits.
     /// scalarOutput[0]: request id. Refusals (stale revision, unknown id, wrong
