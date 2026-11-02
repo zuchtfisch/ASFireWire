@@ -50,4 +50,37 @@ TEST(FF800ControlSettingsTests, EncodedConfigPreservesUnrelatedWords) {
     EXPECT_EQ((*edited)[1], baseline[1]);
     EXPECT_EQ((*edited)[2], baseline[2]);
 }
+TEST(FF800ControlSettingsTests, ControlIPCRejectsUnknownIdsAndKinds) {
+    const FirefaceSettings original{};
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+                 0xF80000, 0, 1).error(), FF800SettingError::kUnknownParameter);
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+                 0xF8000A, 2, 1).error(), FF800SettingError::kUnknownParameter);
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+                 0xF80001, 2, 1).error(), FF800SettingError::kInvalidValue);
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+                 0xF80005, 0, 1).error(), FF800SettingError::kInvalidValue);
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+                 0xF80001, 0, 2).error(), FF800SettingError::kInvalidValue);
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+                 0xF80008, 2, UINT64_MAX).error(), FF800SettingError::kInvalidValue);
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF400, original,
+                 0xF80005, 2, 1).error(), FF800SettingError::kUnsupportedModel);
+}
+
+TEST(FF800ControlSettingsTests, ControlIPCKnownValueProducesExpectedImage) {
+    FirefaceSettings original{};
+    const auto encoded = EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+                                                      0xF80006, 2, 0);
+    const auto expected = EncodeFF800SettingChange(FirefaceModel::kFF800, original,
+                                                    FF800Setting::kInput7Jack, 0);
+    ASSERT_TRUE(encoded.has_value());
+    ASSERT_TRUE(expected.has_value());
+    EXPECT_EQ(*encoded, *expected);
+    EXPECT_EQ(EncodeFF800ControlParameter(FirefaceModel::kFF800, original,
+              0xF80001, 0, 1).value(),
+              EncodeFF800SettingChange(FirefaceModel::kFF800, original,
+              FF800Setting::kPhantom7, 1).value());
+}
+
 } // namespace
