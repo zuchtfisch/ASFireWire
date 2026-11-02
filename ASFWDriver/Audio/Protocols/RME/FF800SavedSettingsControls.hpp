@@ -9,6 +9,7 @@
 
 #include "../../Controls/IControlProvider.hpp"
 #include "FirefaceSettings.hpp"
+#include "FirefaceFamilyDriver.hpp"
 
 #include <optional>
 #include <utility>
@@ -17,11 +18,12 @@ namespace ASFW::Audio::RME {
 
 class FF800SavedSettingsControls final : public Controls::IControlProvider {
 public:
-    explicit FF800SavedSettingsControls(const std::optional<FirefaceSettings>* saved) noexcept
-        : saved_(saved) {}
+    explicit FF800SavedSettingsControls(FirefaceFamilyDriver& driver) noexcept
+        : driver_(driver) {}
 
     [[nodiscard]] std::optional<Controls::ControlSnapshot> CopySnapshot() const override {
-        if (!saved_ || !*saved_) return std::nullopt;
+        const auto& saved = *driver_.SavedSettingsSlot();
+        if (!saved) return std::nullopt;
         namespace AM = AudioModel;
         Controls::ControlSnapshot snapshot{};
         snapshot.family = "rme-ff800-flash";
@@ -32,7 +34,7 @@ public:
         constexpr AM::NodeId node{0xF800};
         snapshot.topology.nodes.push_back({node, "FF800 saved hardware settings (flash)", AM::ProcessorNode{}});
 
-        const FirefaceSettings& s = **saved_;
+        const FirefaceSettings& s = *saved;
         const auto addBoolean = [&](uint32_t id, const char* name, AM::ParameterSemantic semantic, bool value) {
             snapshot.topology.parameters.push_back({
                 AM::ParameterId{id}, AM::ParameterTarget{node}, semantic,
@@ -71,13 +73,36 @@ public:
         return snapshot;
     }
 
-    void SetParameter(AudioModel::ParameterId, const AudioModel::ParameterValue&,
+    // WIRING ONLY: validate the semantic write against the family's guarded
+    // candidate-image builder. Even a valid candidate is REFUSED. Do not change
+    // that until a separate, hardware-tested async write/confirmation path
+    // exists. Public snapshot parameters remain ReadOnly, so ControlService
+    // rejects normal app writes before this fallback is entered.
+    void SetParameter(AudioModel::ParameterId id, const AudioModel::ParameterValue& value,
                       Completion done) override {
+        uint64_t kind = 0;
+        uint64_t bits = 0;
+        if (const auto* boolean = std::get_if<bool>(&value)) {
+            kind = 0;
+            bits = *boolean ? 1U : 0U;
+        } else if (const auto* integer = std::get_if<int64_t>(&value)) {
+            kind = 2;
+            bits = static_cast<uint64_t>(*integer);
+        } else {
+            done(kIOReturnBadArgument, false);
+            return;
+        }
+        const auto candidate = driver_.PreviewFF800ControlWrite(id.value, kind, bits);
+        if (!candidate) {
+            done(candidate.error(), false);
+            return;
+        }
+        // No call to WriteWords / WriteConfig. No state mutation.
         done(kIOReturnNotWritable, false);
     }
 
 private:
-    const std::optional<FirefaceSettings>* saved_;
+    FirefaceFamilyDriver& driver_;
 };
 
 } // namespace ASFW::Audio::RME
