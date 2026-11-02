@@ -53,6 +53,25 @@ simulated audio mutation; an in-progress simulated audio mutation excludes a
 new token; releasing an older token cannot free the current owner; invalidation
 on bus reset revokes the old token even if a generation is later reused.
 
+### Audio-priority preemption (reference model only)
+
+A lease that blocks a real CoreAudio StartIO/StopIO, a bus reset, or
+device teardown would be unacceptable. The host-only model therefore also
+provides `PreemptForAudioMutation` and `PreemptForDeviceLoss`. Both
+invalidate the control token/epoch immediately without waiting for a bus
+callback. The former records that the simulated audio mutation is busy; the
+latter lets an externally updated retired/offline/generation state refuse a
+new admission. Tests cover a late release after preemption and repeated
+preemptions.
+
+**This does not yet safely cancel an actual in-flight FireWire write.** A
+write that was already submitted may reach hardware even after preemption,
+and FF800 has no reliable full config readback. A real design needs atomic
+admission and dispatch arbitration with audio's reconcile owner, epoch-aware
+transport cancellation/teardown, and a policy for writes that cannot be
+reliably recalled. These are reasons to keep production controls read-only,
+not reasons to defer or block audio operations.
+
 This class neither acquires `SessionScheduler::lock_` nor makes
 `Submit/Reconcile` atomic with FF800 control-write admission. It is **not**
 used by production code, and it is not itself thread-safe. The actual
