@@ -413,3 +413,62 @@ nonisolated struct ControlParameterChange: Sendable, Equatable {
                   parameterId: UInt32(scalars[4]), value: value)
     }
 }
+
+
+/// Read-only FF800 control-preview diagnosis, ABI v1 (64 bytes, native little-endian).
+/// This is an observation, never authorization to write or a hardware state readback.
+nonisolated struct FF800SessionDiagnostic: Sendable, Equatable {
+    enum Reason: UInt32, Sendable {
+        case eligiblePreviewOnly = 1, disconnected, retired, teardown, halAttached
+        case streaming, reconciling, configurationRequested, restartPending
+        case clockChangePending, routeNotCurrent, generationMismatch
+
+        var description: String {
+            switch self {
+            case .eligiblePreviewOnly: "Preview gate reports no blocker"
+            case .disconnected: "Device disconnected"
+            case .retired: "Device retired"
+            case .teardown: "Device teardown in progress"
+            case .halAttached: "CoreAudio attached"
+            case .streaming: "Audio streaming"
+            case .reconciling: "Audio transition in progress"
+            case .configurationRequested: "Configuration requested"
+            case .restartPending: "Restart pending"
+            case .clockChangePending: "Clock change pending"
+            case .routeNotCurrent: "Route no longer current"
+            case .generationMismatch: "Bus generation mismatch"
+            }
+        }
+    }
+
+    let deviceGuid: UInt64
+    let timestampNs: UInt64
+    let generation: UInt32
+    let reason: Reason
+
+    /// Reject an unknown version, malformed header, mismatched GUID or
+    /// independently observed generation, stale route and reserved bits.
+    /// A status=unavailable envelope intentionally decodes to nil.
+    static func decode(_ data: Data, guid: UInt64, discoveryGeneration: UInt32) -> Self? {
+        guard data.count == 64, guid != 0 else { return nil }
+        let bytes = [UInt8](data)
+        func u32(_ offset: Int) -> UInt32 {
+            (0..<4).reduce(UInt32.zero) { value, i in
+                value | (UInt32(bytes[offset + i]) << (8 * i))
+            }
+        }
+        func u64(_ offset: Int) -> UInt64 {
+            (0..<8).reduce(UInt64.zero) { value, i in
+                value | (UInt64(bytes[offset + i]) << (8 * i))
+            }
+        }
+        guard u32(0) == 1, u32(4) == 64, u32(8) == 1,
+              let reason = Reason(rawValue: u32(12)),
+              u64(16) == guid, u64(24) != 0,
+              u32(32) == discoveryGeneration, u32(36) == discoveryGeneration,
+              u32(40) == 1, u32(44) == 1,
+              (48..<64).allSatisfy({ bytes[$0] == 0 }) else { return nil }
+        return Self(deviceGuid: guid, timestampNs: u64(24),
+                    generation: discoveryGeneration, reason: reason)
+    }
+}
