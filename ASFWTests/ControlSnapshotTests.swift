@@ -764,7 +764,7 @@ struct FF800SessionDiagnosticWireTests {
         driver.isConnected = false
         model.reload()
         #expect(model.ff800Diagnostic == nil)
-        #expect(model.ff800DiagnosticAvailability == .notChecked)
+        #expect(model.ff800DiagnosticAvailability == .driverDisconnected)
         #expect(driver.writes.isEmpty)
     }
 
