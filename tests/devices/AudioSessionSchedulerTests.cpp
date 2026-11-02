@@ -85,6 +85,21 @@ using SchedulerTest = ShapedSchedulerTest<kCmpDevice>;
 using ApogeeTest = ShapedSchedulerTest<kApogeeDevice>;
 using DiceQuietPeriodTest = ShapedSchedulerTest<kDiceDevice>;
 
+TEST_F(SchedulerTest, FF800UnavailableWireEnvelopeIsAlwaysNonAuthorizing) {
+    using namespace ASFW::Audio::RME;
+    constexpr auto unavailable = FF800UnavailableDiagnosticV1();
+    static_assert(unavailable.abiVersion == ASFW_FF800_SESSION_DIAG_ABI_VERSION);
+    static_assert(unavailable.structSize == sizeof(ASFWFF800SessionDiagV1));
+    EXPECT_EQ(unavailable.status, ASFWFF800SessionDiagUnavailable);
+    EXPECT_EQ(unavailable.reason, ASFWFF800SessionDiagUnknown);
+    EXPECT_EQ(unavailable.deviceGuid, 0u);
+    EXPECT_EQ(unavailable.timestampNs, 0u);
+    EXPECT_EQ(unavailable.sessionKnown, 0u);
+    EXPECT_EQ(unavailable.routeCurrent, 0u);
+    EXPECT_FALSE(ValidFF800DiagnosticV1(unavailable, rig.guid));
+    EXPECT_FALSE(FF800DiagnosticRouteMatchesGeneration(unavailable, rig.guid, 0));
+}
+
 TEST_F(SchedulerTest, FF800DiagnosticV1IsUnavailableWithoutKnownSession) {
     using namespace ASFW::Audio::RME;
     const auto absent = BuildFF800DiagnosticV1(0x1234, 10, std::nullopt, {true, true, 5, 5});
