@@ -751,4 +751,57 @@ TEST(FF800SimulatedLeaseTests, RejectsTransitionsAndStaleRouteBeforeAcquisition)
     EXPECT_TRUE(lease.Acquire(s).has_value());
 }
 
+TEST(FF800SimulatedLeaseTests, AudioPreemptsControlWithoutWaitingForCallback) {
+    FF800SimulatedConfigLease lease;
+    const auto old = lease.Acquire(IdleFF800SimSession(201));
+    ASSERT_TRUE(old.has_value());
+    lease.PreemptForAudioMutation(); // Start/Stop/Configure takes priority
+    EXPECT_TRUE(lease.AudioBusy());
+    EXPECT_FALSE(lease.Holds(*old));
+    EXPECT_FALSE(lease.Release(*old));
+    EXPECT_FALSE(lease.Acquire(IdleFF800SimSession(201)).has_value());
+    lease.EndAudioMutation();
+    const auto fresh = lease.Acquire(IdleFF800SimSession(201));
+    ASSERT_TRUE(fresh.has_value());
+    EXPECT_NE(old->epoch, fresh->epoch);
+    EXPECT_FALSE(lease.Release(*old));
+    EXPECT_TRUE(lease.Holds(*fresh));
+}
+
+TEST(FF800SimulatedLeaseTests, RetirementPreemptsControlAndRequiresFreshAdmission) {
+    FF800SimulatedConfigLease lease;
+    const auto old = lease.Acquire(IdleFF800SimSession(202));
+    ASSERT_TRUE(old.has_value());
+    lease.PreemptForDeviceLoss();
+    EXPECT_FALSE(lease.Holds(*old));
+    EXPECT_FALSE(lease.Release(*old));
+    auto retired = IdleFF800SimSession(202);
+    retired.retired = true;
+    EXPECT_FALSE(lease.Acquire(retired).has_value());
+    auto staleRoute = IdleFF800SimSession(202);
+    staleRoute.cachedGeneration = 201;
+    EXPECT_FALSE(lease.Acquire(staleRoute).has_value());
+    const auto current = lease.Acquire(IdleFF800SimSession(203));
+    ASSERT_TRUE(current.has_value());
+    EXPECT_FALSE(lease.Release(*old));
+    EXPECT_TRUE(lease.Holds(*current));
+}
+
+TEST(FF800SimulatedLeaseTests, RepeatedAudioPreemptionsInvalidateAllEarlierTokens) {
+    FF800SimulatedConfigLease lease;
+    const auto first = lease.Acquire(IdleFF800SimSession(220));
+    ASSERT_TRUE(first.has_value());
+    lease.PreemptForAudioMutation();
+    lease.EndAudioMutation();
+    const auto second = lease.Acquire(IdleFF800SimSession(220));
+    ASSERT_TRUE(second.has_value());
+    lease.PreemptForAudioMutation();
+    lease.EndAudioMutation();
+    const auto third = lease.Acquire(IdleFF800SimSession(220));
+    ASSERT_TRUE(third.has_value());
+    EXPECT_FALSE(lease.Release(*first));
+    EXPECT_FALSE(lease.Release(*second));
+    EXPECT_TRUE(lease.Holds(*third));
+}
+
 } // namespace
