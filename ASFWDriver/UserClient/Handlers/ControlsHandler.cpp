@@ -126,13 +126,13 @@ kern_return_t ControlsHandler::GetFF800SessionDiagnostic(IOUserClientMethodArgum
             // A session snapshot is useful for diagnosis but never sufficient
             // for authorization. Recheck route ownership after the snapshot.
             if (session && registry.IsCurrent(*route)) {
-                timespec now{};
+                std::timespec now{};
                 if (clock_gettime(CLOCK_MONOTONIC, &now) == 0 && now.tv_sec >= 0) {
                     const uint64_t ns = static_cast<uint64_t>(now.tv_sec) * 1'000'000'000ULL +
                                         static_cast<uint64_t>(now.tv_nsec);
                     envelope = Audio::RME::BuildFF800DiagnosticV1(
                         guid, ns, session,
-                        {true, true, route->generation, route->generation});
+                        {true, true, route->generation.value, route->generation.value});
                 }
             }
         }
