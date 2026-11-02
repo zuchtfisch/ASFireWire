@@ -45,10 +45,29 @@ FF800PreviewConditionsFromSnapshot(
     return out;
 }
 
+/// Distinguishes an absent session from disconnected live-route diagnostics.
+/// Read-only and fail-closed; kEligible is never permission to write hardware.
+struct FF800SnapshotPreviewExplanation {
+    bool sessionKnown{false};
+    FF800PreviewBlockReason reason{FF800PreviewBlockReason::kDisconnected};
+
+    [[nodiscard]] constexpr bool PreviewEligible() const noexcept {
+        return sessionKnown && reason == FF800PreviewBlockReason::kEligible;
+    }
+};
+
+[[nodiscard]] inline FF800SnapshotPreviewExplanation
+ExplainFF800PreviewFromSnapshot(
+    const std::optional<Session::SessionCoordinationSnapshot>& session,
+    FF800ControlRouteDiagnostics route) noexcept {
+    if (!session) return {false, FF800PreviewBlockReason::kDisconnected};
+    return {true, ExplainFF800ControlSession(FF800PreviewConditionsFromSnapshot(session, route))};
+}
+
 [[nodiscard]] inline bool CanPreviewFF800FromSnapshot(
     const std::optional<Session::SessionCoordinationSnapshot>& session,
     FF800ControlRouteDiagnostics route) noexcept {
-    return CanPreviewFF800ControlSession(FF800PreviewConditionsFromSnapshot(session, route));
+    return ExplainFF800PreviewFromSnapshot(session, route).PreviewEligible();
 }
 
 } // namespace ASFW::Audio::RME
