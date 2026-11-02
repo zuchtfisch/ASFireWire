@@ -94,6 +94,7 @@ struct Fireface800SettingsView: View {
                 .foregroundStyle(.secondary)
 
                 savedSettingsSection
+                previewDiagnosticsSection
 
                 GroupBox("Microphone phantom power (48 V)") {
                     VStack(alignment: .leading, spacing: 12) {
@@ -210,6 +211,61 @@ struct Fireface800SettingsView: View {
                 }
             }
             .padding(8)
+        }
+    }
+
+    // The C++ FF800PreviewBlockReason policy is not yet exposed through the
+    // driver/user-client snapshot. Do not infer live scheduler state from cached
+    // flash settings or from the user's draft controls.
+    private var previewDiagnosticsSection: some View {
+        GroupBox("FF800 control preview diagnostics (read only)") {
+            VStack(alignment: .leading, spacing: 10) {
+                Label(
+                    controls.isConnected
+                        ? "Session diagnostic unavailable"
+                        : "Driver disconnected — session diagnostic unavailable",
+                    systemImage: "info.circle"
+                )
+                .foregroundStyle(.secondary)
+
+                Text("No live FF800 session-admission reason is exposed by the driver to this screen. The codes below describe possible diagnostic outcomes; they are not current device measurements or hardware write permissions.")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+
+                DisclosureGroup("Possible blocking reasons (reference only)") {
+                    VStack(alignment: .leading, spacing: 7) {
+                        previewReasonRow("disconnected", "Device connection unavailable")
+                        previewReasonRow("retired", "Device retired, e.g. after reset")
+                        previewReasonRow("teardown", "Device teardown in progress")
+                        previewReasonRow("hal-attached", "CoreAudio owns the session")
+                        previewReasonRow("streaming", "Audio streams are active")
+                        previewReasonRow("reconciling", "Audio transition in progress")
+                        previewReasonRow("configuration-requested", "Audio configuration pending")
+                        previewReasonRow("restart-pending", "Session restart pending")
+                        previewReasonRow("clock-change-pending", "Clock change pending")
+                        previewReasonRow("route-not-current", "Device route no longer current")
+                        previewReasonRow("generation-mismatch", "Cached and route generations differ")
+                    }
+                    .padding(.top, 8)
+                }
+
+                Text("Even an 'eligible-preview-only' result would not authorize a FireWire write. Current FF800 register state and phantom-power voltage are not verified. Hardware writes remain disabled.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(8)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    private func previewReasonRow(_ code: String, _ meaning: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 12) {
+            Text(code)
+                .font(.system(.caption, design: .monospaced))
+                .frame(width: 190, alignment: .leading)
+            Text(meaning)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
