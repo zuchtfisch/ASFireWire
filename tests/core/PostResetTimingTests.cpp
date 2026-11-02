@@ -43,6 +43,26 @@ TEST(PostResetTiming, OnBusResetStarted_InvalidatesPreviousState) {
     EXPECT_EQ(r.state, TimingGateState::Closed);
 }
 
+TEST(PostResetTiming, DeadlinesNearUInt64LimitNeverWrapOpenEarly) {
+    PostResetTimingCoordinator c;
+    constexpr uint64_t maxNs = UINT64_MAX;
+    constexpr uint64_t anchor = maxNs - 200 * kMs;
+    c.OnSelfIDComplete(kGen, anchor);
+
+    EXPECT_EQ(c.State().bmNonIncumbentAllowedNs, anchor + 125 * kMs);
+    EXPECT_EQ(c.State().irmFallbackAllowedNs, maxNs);
+    EXPECT_EQ(c.State().newIsoAllocationAllowedNs, maxNs);
+
+    // The 625 ms and 1000 ms windows cannot fit in the remaining timestamp
+    // range. They must not wrap and falsely authorize bus/IRM/ISO work.
+    EXPECT_FALSE(c.CheckGate(kGen, TimingGate::IRMFallbackCheck, anchor).allowed);
+    EXPECT_FALSE(c.CheckNewIsoAllocationGate(kGen, anchor).allowed);
+    EXPECT_FALSE(c.CheckGate(kGen, TimingGate::IRMFallbackCheck, maxNs - 1).allowed);
+    EXPECT_FALSE(c.CheckNewIsoAllocationGate(kGen, maxNs - 1).allowed);
+    EXPECT_TRUE(c.CheckGate(kGen, TimingGate::BMNonIncumbentContention,
+                            anchor + 125 * kMs).allowed);
+}
+
 TEST(PostResetTiming, OnSelfIDComplete_ComputesExpectedGateTimes) {
     PostResetTimingCoordinator c;
     c.OnSelfIDComplete(kGen, kT0);
