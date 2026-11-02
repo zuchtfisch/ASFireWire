@@ -49,6 +49,23 @@ host tests exercise queries while a device prepare stage is held, after
 reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
 register writes are introduced.
 
+### Explainable preview rejection (diagnostic only)
+
+`ExplainFF800ControlSession` returns the first blocking
+`FF800PreviewBlockReason`, with deterministic priority:
+disconnected, retired, teardown, HAL-attached, streaming, reconciling,
+configuration-requested, restart-pending, clock-change-pending,
+route-not-current, generation-mismatch. When none applies it reports
+`kEligible` (display identifier `eligible-preview-only`). The existing boolean
+preview delegates to the same reason function, avoiding policy drift.
+
+`ExplainFF800PreviewFromSnapshot` also provides a `sessionKnown` bit to
+distinguish a missing scheduler session from a known session whose route is
+disconnected. These are **diagnostic descriptions of supplied snapshots**, not
+current hardware truth. No snapshot or reason can serve as a write permit,
+hardware readback, exclusive configuration lease or proof that phantom power
+is safe. The FF800 write path remains disabled.
+
 ### Read-only bridge from scheduler diagnostics to FF800 preview
 
 `FF800ControlSessionDiagnostics.hpp` now maps an **existing**
