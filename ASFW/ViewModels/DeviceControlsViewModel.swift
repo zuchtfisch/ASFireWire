@@ -231,6 +231,15 @@ final class DeviceControlsViewModel: ObservableObject {
         }
     }
 
+    /// A duplicated GUID is ambiguous even when the first entry looks like an FF800.
+    /// Fail closed rather than trusting the order of discovery responses.
+    private func uniqueDiscoveredDevice(guid: UInt64) -> FWDeviceInfo? {
+        guard let discovered = source.getDiscoveredDevices() else { return nil }
+        let matches = discovered.filter { $0.guid == guid }
+        guard matches.count == 1 else { return nil }
+        return matches[0]
+    }
+
     /// External topology-generation changes invalidate observations immediately.
     /// This deliberately performs no IPC, registry read, or device operation.
     func invalidateFF800Diagnostic() {
@@ -250,7 +259,7 @@ final class DeviceControlsViewModel: ObservableObject {
             ff800DiagnosticAvailability = .noDeviceSelected
             return
         }
-        guard let before = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
+        guard let before = uniqueDiscoveredDevice(guid: guid),
               Self.isIdentifiedFF800(before) else {
             ff800DiagnosticAvailability = .deviceNotIdentified
             return
@@ -264,7 +273,7 @@ final class DeviceControlsViewModel: ObservableObject {
                 ? .driverDoesNotSupportDiagnostic : .diagnosticUnavailable
             return
         }
-        guard let after = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
+        guard let after = uniqueDiscoveredDevice(guid: guid),
               Self.isIdentifiedFF800(after),
               before.generation == after.generation,
               before.nodeId == after.nodeId else {
