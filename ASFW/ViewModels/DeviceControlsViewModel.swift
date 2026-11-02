@@ -196,8 +196,10 @@ final class DeviceControlsViewModel: ObservableObject {
         guard source.isConnected, let guid = selectedGUID, guid != 0,
               let before = source.getDiscoveredDevices()?.first(where: { $0.guid == guid })
         else { return }
-        guard case .success(let bytes) = source.getFF800SessionDiagnostic(guid: guid),
+        guard before.state == .ready,
+              case .success(let bytes) = source.getFF800SessionDiagnostic(guid: guid),
               let after = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
+              after.state == .ready,
               before.generation == after.generation,
               before.nodeId == after.nodeId,
               let diagnostic = FF800SessionDiagnostic.decode(
