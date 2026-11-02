@@ -211,6 +211,7 @@ MethodDispatchResult DispatchConfigRomMethods(
 }
 
 MethodDispatchResult DispatchAVCMethods(ASFW::UserClient::UserClientRuntimeState& runtimeState,
+                                        ASFWDriver& driver,
                                         IOUserClientMethodArguments* arguments,
                                         uint64_t selector) {
     switch (selector) {
@@ -663,7 +664,7 @@ kern_return_t ASFWDriverUserClient::ExternalMethod(uint64_t selector,
     if (auto result = DispatchConfigRomMethods(*runtimeState, arguments, selector)) {
         return *result;
     }
-    if (auto result = DispatchAVCMethods(*runtimeState, arguments, selector)) {
+    if (auto result = DispatchAVCMethods(*runtimeState, *ivars->driver, arguments, selector)) {
         return *result;
     }
     if (auto result = DispatchDriverControlMethods(*ivars->driver, arguments, selector)) {
