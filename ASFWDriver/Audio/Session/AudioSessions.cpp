@@ -235,4 +235,11 @@ std::optional<SessionSnapshot> AudioSessions::Snapshot(uint64_t guid) const noex
     return session->Snapshot();
 }
 
+std::optional<SessionCoordinationSnapshot>
+AudioSessions::CoordinationSnapshot(uint64_t guid) const noexcept {
+    const auto session = Find(guid);
+    if (!session) return std::nullopt;
+    return session->CoordinationSnapshot();
+}
+
 } // namespace ASFW::Audio::Session
