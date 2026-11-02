@@ -101,6 +101,11 @@ public:
         return model_ == FirefaceModel::kFF800 ? 0U : 5U;
     }
     void SetLinkSpeed(bool s800) noexcept { s800_ = s800; }
+    /// Called when discovery rebinds the device route, including idle devices.
+    /// Do not wait for Configure to invalidate flash-backed controls after
+    /// a bus reset. This performs no FireWire I/O.
+    void RefreshRouteGeneration() noexcept { SyncGeneration(); }
+
 
     [[nodiscard]] std::expected<DuplexPrepareResult, IOReturn> Configure(
         const AudioDuplexChannels& channels, const AudioClockConfig& clock) override {
