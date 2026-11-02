@@ -560,4 +560,74 @@ TEST(FF800ControllerQueueTests, QueuedDuplicateAndReorderedResultsAreIgnored) {
     EXPECT_FALSE(harness.Start({907, 64, {4, 5, 6}}));
 }
 
+TEST(FF800WireDispatchIntegrationTests, SemanticChangeCreatesOneExactFakeBlockWrite) {
+    FirefaceSettings saved{};
+    saved.clockMaster = true;
+    const auto candidate = EncodeFF800ControlParameter(
+        FirefaceModel::kFF800, saved, 0xF80001, 0, 1);
+    ASSERT_TRUE(candidate.has_value());
+
+    struct FakeBlockWrite {
+        uint64_t address;
+        std::array<uint8_t, 12> bytes;
+    };
+    std::vector<FakeBlockWrite> writes;
+    FF800ControlWriteHarness::Completion callback;
+    FF800ControlWriteHarness harness(
+        [&](const FF800WriteEnvelope& request, FF800ControlWriteHarness::Completion done) {
+            const auto wire = MakeFF800ControlWireImage(request.words);
+            writes.push_back({wire.address, wire.payload});
+            callback = std::move(done);
+        });
+    harness.Reset(70);
+    ASSERT_TRUE(harness.Start({1001, 70, *candidate}));
+    ASSERT_EQ(writes.size(), 1U);
+    EXPECT_EQ(writes[0].address, 0x0000fc88f014ULL);
+    EXPECT_EQ(writes[0].bytes, MakeFF800ControlWireImage(*candidate).payload);
+    ASSERT_TRUE(static_cast<bool>(callback));
+    callback(true);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+    EXPECT_FALSE(harness.Start({1002, 70, *candidate}));
+    EXPECT_EQ(writes.size(), 1U);
+}
+
+TEST(FF800WireDispatchIntegrationTests, ResetRejectsOldGenerationBeforeFakeDispatch) {
+    std::vector<FF800ControlWireImage> writes;
+    FF800ControlWriteHarness harness(
+        [&](const FF800WriteEnvelope& request, FF800ControlWriteHarness::Completion) {
+            writes.push_back(MakeFF800ControlWireImage(request.words));
+        });
+    harness.Reset(82);
+    EXPECT_FALSE(harness.Start({1003, 81, {1, 2, 3}}));
+    EXPECT_TRUE(writes.empty());
+    ASSERT_TRUE(harness.Start({1004, 82, {1, 2, 3}}));
+    ASSERT_EQ(writes.size(), 1U);
+    EXPECT_EQ(writes.front().payload, MakeFF800ControlWireImage({1, 2, 3}).payload);
+}
+
+TEST(FF800WireDispatchIntegrationTests, QueuedFakeAckAfterTimeoutNeverConfirmsWrite) {
+    std::vector<FF800ControlWireImage> writes;
+    std::vector<FF800ControlWriteHarness::ControllerTask> queued;
+    FF800ControlWriteHarness harness(
+        [&](const FF800WriteEnvelope& request, FF800ControlWriteHarness::Completion done) {
+            writes.push_back(MakeFF800ControlWireImage(request.words));
+            done(true);
+        },
+        [&](FF800ControlWriteHarness::ControllerTask task) {
+            queued.push_back(std::move(task));
+        });
+    harness.Reset(83);
+    ASSERT_TRUE(harness.Start({1005, 83, {0x12345678, 0x90abcdef, 0x01020304}}));
+    ASSERT_EQ(writes.size(), 1U);
+    ASSERT_EQ(queued.size(), 1U);
+    ASSERT_TRUE(harness.Timeout(1005, 83));
+    queued.front()();
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kTimedOut);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+    EXPECT_FALSE(harness.Start({1006, 83, {4, 5, 6}}));
+    EXPECT_EQ(writes.size(), 1U);
+}
+
 } // namespace
