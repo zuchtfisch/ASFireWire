@@ -550,6 +550,29 @@ SessionSnapshot SessionScheduler::Snapshot() const noexcept {
     return out;
 }
 
+SessionCoordinationSnapshot SessionScheduler::CoordinationSnapshot() const noexcept {
+    SessionCoordinationSnapshot out{};
+    out.retired = IsRetired();
+    out.teardown = TeardownRequested();
+    if (lock_ == nullptr) return out;
+    IOLockLock(lock_);
+    out.halAttached = wanted_.halAttached;
+    out.streaming = actual_.state == SessionState::Running;
+    out.reconciling = reconciling_;
+    out.restartPending = pending_.active || wanted_.restart;
+    out.clockChangePending = wanted_.clockDirty;
+    out.configurationRequested = requested_ != completed_;
+    out.requestedTicket = requested_;
+    out.completedTicket = completed_;
+    IOLockUnlock(lock_);
+    // These lifecycle flags may change independently of lock_, and a
+    // snapshot can become stale immediately. Consumers must never interpret
+    // it as an authorization to change FireWire registers.
+    out.retired = out.retired || IsRetired();
+    out.teardown = out.teardown || TeardownRequested();
+    return out;
+}
+
 // ---------------------------------------------------------------------------
 // Serialization
 // ---------------------------------------------------------------------------
