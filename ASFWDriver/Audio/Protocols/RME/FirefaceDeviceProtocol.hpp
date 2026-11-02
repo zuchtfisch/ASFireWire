@@ -42,6 +42,7 @@ public:
     void UpdateRuntimeContext(const Discovery::DeviceRouteToken& route,
                               std::shared_ptr<ASFW::AVC::IAvcUnit>) override {
         io_.UpdateRoute(route);
+        family_.RefreshRouteGeneration();
         if (const auto record = registry_.SnapshotByGuid(route.guid)) {
             family_.SetLinkSpeed(record->link.isochToNode == FW::FwSpeed::S800);
         }
