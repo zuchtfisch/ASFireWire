@@ -47,6 +47,13 @@ public:
         }
     }
     void UpdateLinkSpeed(bool s800) noexcept { family_.SetLinkSpeed(s800); }
+    /// Dry-run entry point for the future semantic control-write bridge.
+    /// Never reaches the FireWire bus, even on a valid request.
+    [[nodiscard]] std::expected<ConfigWords, IOReturn> PreviewFF800ControlWrite(
+        uint32_t parameterId, uint64_t valueKind, uint64_t valueBits) const noexcept {
+        return family_.PreviewFF800ControlWrite(parameterId, valueKind, valueBits);
+    }
+
 
     /// Snapshot of the device's saved FF800 flash settings, captured during
     /// the last audio Configure. This is NOT a live hardware readback: in
