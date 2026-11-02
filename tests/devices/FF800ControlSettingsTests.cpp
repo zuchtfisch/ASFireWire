@@ -5,6 +5,7 @@
 #include "Audio/Protocols/RME/FF800ControlWireImage.hpp"
 #include "Audio/Protocols/RME/FF800ControlPreviewGate.hpp"
 #include <gtest/gtest.h>
+#include <vector>
 
 namespace {
 using namespace ASFW::Audio::RME;
@@ -426,6 +427,78 @@ TEST(FF800TransportHarnessTests, SynchronousCompletionCannotBeMistakenForVerific
     EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
     EXPECT_FALSE(harness.VerifiedImage().has_value());
     EXPECT_FALSE(harness.Start({703, 32, {4, 5, 6}}));
+}
+
+TEST(FF800ControllerQueueTests, CallbackChangesStateOnlyWhenControllerDrainsQueue) {
+    std::vector<FF800ControlWriteHarness::ControllerTask> tasks;
+    FF800ControlWriteHarness::Completion completion;
+    FF800ControlWriteHarness harness(
+        [&](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion cb) {
+            completion = std::move(cb);
+        },
+        [&](FF800ControlWriteHarness::ControllerTask task) {
+            tasks.push_back(std::move(task));
+        });
+    ASSERT_TRUE(harness.Start({801, 42, {1, 2, 3}}));
+    completion(true);
+    ASSERT_EQ(tasks.size(), 1U);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kInFlight);
+    tasks.front()();
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+}
+
+TEST(FF800ControllerQueueTests, TimeoutBeforeQueuedAckPreservesFailure) {
+    std::vector<FF800ControlWriteHarness::ControllerTask> tasks;
+    FF800ControlWriteHarness harness(
+        [](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion cb) {
+            cb(true);
+        },
+        [&](FF800ControlWriteHarness::ControllerTask task) {
+            tasks.push_back(std::move(task));
+        });
+    ASSERT_TRUE(harness.Start({802, 43, {1, 2, 3}}));
+    ASSERT_EQ(tasks.size(), 1U);
+    ASSERT_TRUE(harness.Timeout(802, 43));
+    tasks.front()();
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kTimedOut);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+}
+
+TEST(FF800ControllerQueueTests, ResetBeforeQueuedAckIgnoresReusedRequest) {
+    std::vector<FF800ControlWriteHarness::ControllerTask> tasks;
+    FF800ControlWriteHarness harness(
+        [](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion cb) { cb(true); },
+        [&](FF800ControlWriteHarness::ControllerTask task) {
+            tasks.push_back(std::move(task));
+        });
+    harness.Reset(44);
+    ASSERT_TRUE(harness.Start({803, 44, {1, 2, 3}}));
+    ASSERT_EQ(tasks.size(), 1U);
+    harness.Reset(44);
+    ASSERT_TRUE(harness.Start({803, 44, {4, 5, 6}}));
+    ASSERT_EQ(tasks.size(), 2U);
+    tasks[0]();
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kInFlight);
+    tasks[1]();
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+}
+
+TEST(FF800ControllerQueueTests, QueuedCallbackAfterDestructionIsHarmless) {
+    std::vector<FF800ControlWriteHarness::ControllerTask> tasks;
+    {
+        FF800ControlWriteHarness harness(
+            [](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion cb) { cb(true); },
+            [&](FF800ControlWriteHarness::ControllerTask task) {
+                tasks.push_back(std::move(task));
+            });
+        ASSERT_TRUE(harness.Start({804, 45, {1, 2, 3}}));
+    }
+    ASSERT_EQ(tasks.size(), 1U);
+    tasks.front()();
+    SUCCEED();
 }
 
 } // namespace
