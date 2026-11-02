@@ -32,6 +32,36 @@ nonisolated struct ControlSnapshot: Decodable, Sendable, Equatable {
         return snapshot
     }
 
+    /// Only a complete saved FF800 flash projection may be displayed as cached
+    /// settings. This is never evidence of live hardware/phantom-power state.
+    func isValidFF800SavedSettings(for guid: UInt64, connected: Bool) -> Bool {
+        guard connected,
+              family == "rme-ff800-flash",
+              self.guid.caseInsensitiveCompare(String(format: "0x%016llX", guid)) == .orderedSame,
+              parameters.count == 9,
+              Set(parameters.map(\.id)) == Set(UInt32(0xF80001)...UInt32(0xF80009)),
+              parameters.allSatisfy({
+                  $0.access == .readOnly && $0.origin == .cached &&
+                  $0.applicable && $0.value != nil
+              }) else { return false }
+        for parameter in parameters {
+            switch parameter.id {
+            case 0xF80001...0xF80004:
+                guard parameter.semantic == .phantomPower,
+                      parameter.domain == .bool,
+                      parameter.value?.boolValue != nil else { return false }
+            case 0xF80005...0xF80007:
+                guard parameter.semantic == .source,
+                      parameter.value?.intValue.map({ (0...2).contains($0) }) == true else { return false }
+            case 0xF80008...0xF80009:
+                guard parameter.semantic == .nominalLevel,
+                      parameter.value?.intValue.map({ (0...2).contains($0) }) == true else { return false }
+            default: return false
+            }
+        }
+        return true
+    }
+
     func port(_ id: UInt32) -> ControlPort? { ports.first { $0.id == id } }
     func node(_ id: UInt32) -> ControlNode? { nodes.first { $0.id == id } }
 
