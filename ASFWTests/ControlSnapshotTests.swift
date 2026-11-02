@@ -263,12 +263,15 @@ struct ControlSnapshotTests {
     }
 
     @Test func ff800FlashRejectsWrongTypesAndOutOfRangeValues() throws {
-        let wrongType = try Self.ff800Snapshot {
-            var parameters = $0["parameters"] as! [[String: Any]]
-            parameters[0]["value"] = 1
-            $0["parameters"] = parameters
+        // The typed JSON decoder refuses a numeric phantom-power value
+        // before the snapshot presentation validator can inspect it.
+        #expect(throws: DecodingError.self) {
+            try Self.ff800Snapshot {
+                var parameters = $0["parameters"] as! [[String: Any]]
+                parameters[0]["value"] = 1
+                $0["parameters"] = parameters
+            }
         }
-        #expect(!wrongType.isValidFF800SavedSettings(for: Self.guid, connected: true))
         let invalidChoice = try Self.ff800Snapshot {
             var parameters = $0["parameters"] as! [[String: Any]]
             parameters[7]["value"] = 99
