@@ -44,6 +44,15 @@ public:
     }
     void UpdateLinkSpeed(bool s800) noexcept { family_.SetLinkSpeed(s800); }
 
+    /// Snapshot of the device's saved FF800 flash settings, captured during
+    /// the last audio Configure. This is NOT a live hardware readback: in
+    /// particular, it must not be presented as the current phantom-power state.
+    /// No FireWire I/O occurs and nothing is changed on the device.
+    [[nodiscard]] std::optional<FirefaceSettings> CopyFF800SavedSettings() const noexcept {
+        if (model_ != FirefaceModel::kFF800) return std::nullopt;
+        return family_.LastSettingsDryRun().settings;
+    }
+
 private:
     Discovery::DeviceRegistry& registry_;
     FirefaceModel model_;
