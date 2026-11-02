@@ -604,3 +604,58 @@ struct DeviceControlsRenderTests {
         }
     }
 }
+
+
+/// Pure Swift reader for the driver-owned, read-only FF800 diagnostic wire ABI.
+@MainActor
+struct FF800SessionDiagnosticWireTests {
+    private let guid: UInt64 = 0x000A_3500_0000_0800
+
+    private func envelope(
+        status: UInt32 = 1, reason: UInt32 = 6,
+        guid: UInt64 = 0x000A_3500_0000_0800,
+        generation: UInt32 = 9
+    ) -> Data {
+        var bytes = [UInt8](repeating: 0, count: 64)
+        func put32(_ value: UInt32, _ index: Int) {
+            for i in 0..<4 { bytes[index + i] = UInt8(truncatingIfNeeded: value >> (8 * i)) }
+        }
+        func put64(_ value: UInt64, _ index: Int) {
+            for i in 0..<8 { bytes[index + i] = UInt8(truncatingIfNeeded: value >> (8 * i)) }
+        }
+        put32(1, 0)       // ABI version
+        put32(64, 4)      // struct size
+        put32(status, 8)
+        put32(reason, 12)
+        put64(guid, 16)
+        put64(123_456_789, 24)
+        put32(generation, 32)
+        put32(generation, 36)
+        put32(1, 40)      // known session
+        put32(1, 44)      // current route
+        return Data(bytes)
+    }
+
+    @Test func acceptsMatchingReadOnlyObservation() {
+        let decoded = FF800SessionDiagnostic.decode(envelope(), guid: guid, discoveryGeneration: 9)
+        #expect(decoded?.reason == .streaming)
+        #expect(decoded?.generation == 9)
+    }
+
+    @Test func rejectsForeignDeviceOrGeneration() {
+        #expect(FF800SessionDiagnostic.decode(envelope(), guid: 42, discoveryGeneration: 9) == nil)
+        #expect(FF800SessionDiagnostic.decode(envelope(), guid: guid, discoveryGeneration: 10) == nil)
+    }
+
+    @Test func rejectsUnavailableAndMalformedEnvelopes() {
+        #expect(FF800SessionDiagnostic.decode(envelope(status: 0), guid: guid, discoveryGeneration: 9) == nil)
+        #expect(FF800SessionDiagnostic.decode(envelope(reason: 99), guid: guid, discoveryGeneration: 9) == nil)
+        #expect(FF800SessionDiagnostic.decode(Data(repeating: 0, count: 63), guid: guid, discoveryGeneration: 9) == nil)
+        var reserved = envelope()
+        reserved[48] = 1
+        #expect(FF800SessionDiagnostic.decode(reserved, guid: guid, discoveryGeneration: 9) == nil)
+        var notCurrent = envelope()
+        notCurrent[44] = 0
+        #expect(FF800SessionDiagnostic.decode(notCurrent, guid: guid, discoveryGeneration: 9) == nil)
+    }
+}
