@@ -58,9 +58,12 @@ nonzero timestamp, known-session/current-route flags and reserved fields.
 It also requires both wire generation fields to match the generation
 obtained from **separate** app-side device discovery. The viewmodel reads
 discovery before and after the IPC and refuses a changed generation or
-node ID. Both discovery observations must also identify a ready device:
-suspended, removed, or not-yet-ready devices cannot produce a displayed
-diagnostic. It clears previously displayed diagnostic data on refresh and
+node ID. Both discovery observations must also identify a ready device with the
+RME vendor ID and Fireface 800 ROM unit specifier/version. FF400 and FF800
+share a root model ID, so the app intentionally rejects FF400, missing or
+ambiguous unit identity, suspended, removed, and not-yet-ready devices
+before displaying a diagnostic. For an unidentified device, the app avoids
+even sending the selector-84 request. It clears previously displayed diagnostic data on refresh and
 selection changes, and never polls in the background.
 
 The FF800 settings screen labels any accepted record as a **past
