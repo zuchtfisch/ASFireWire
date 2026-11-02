@@ -76,9 +76,9 @@ Usage: $0 [--verbose] [--no-bump] [--adhoc] [--scheme NAME] [--config CONFIG] [-
                      see them)
   --scheme NAME      Override scheme (default: ${SCHEME_NAME})
   --config CONFIG    Override configuration (default: ${CONFIGURATION})
-  --arch ARCH        Pin the xcodebuild destination arch (default: unset, so each
-                     target's ARCHS from project.yml applies -- Debug DriverKit
-                     uses arm64e, which is not a valid destination arch)
+  --arch ARCH        Pin build/test destination arch explicitly (default:
+                     generic Any Mac for build, local Mac for Swift tests;
+                     each target's ARCHS still governs the build)
   --set KEY=VALUE    Append an xcodebuild build setting (repeatable)
   --derived PATH     Set DerivedData path (default: ${DERIVED})
 EOF
@@ -107,11 +107,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Computed after arg parsing so --arch can still pin one deliberately.
+# Builds can target "Any Mac" without selecting an arm64/x86_64 run
+# destination. This preserves each target's ARCHS (including DriverKit arm64e).
+# XCTest, unlike a build, must run on a concrete local Mac destination.
+# An explicit --arch retains the old per-architecture destination behavior.
 if [[ -n "${ARCH_NAME}" ]]; then
-  DESTINATION="platform=macOS,arch=${ARCH_NAME}"
+  BUILD_DESTINATION="platform=macOS,arch=${ARCH_NAME}"
+  TEST_DESTINATION="${BUILD_DESTINATION}"
 else
-  DESTINATION="platform=macOS"
+  BUILD_DESTINATION="generic/platform=macOS"
+  TEST_DESTINATION="platform=macOS"
 fi
 
 log() { echo "${BLUE}[INFO]${NC} $*"; }
@@ -163,7 +168,7 @@ generate_compile_commands() {
     -scheme "${SCHEME_NAME}"
     -configuration "${CONFIGURATION}"
     -derivedDataPath "${DERIVED}"
-    -destination "${DESTINATION}"
+    -destination "${BUILD_DESTINATION}"
     clean
     build
   )
@@ -257,7 +262,7 @@ run_swift_tests() {
     -scheme "${SCHEME_NAME}"
     -configuration "${CONFIGURATION}"
     -derivedDataPath "${DERIVED}"
-    -destination "${DESTINATION}"
+    -destination "${TEST_DESTINATION}"
     -only-testing:ASFWTests
     CODE_SIGNING_ALLOWED=NO
     CODE_SIGNING_REQUIRED=NO
@@ -373,7 +378,7 @@ run_build() {
 	    -scheme "${SCHEME_NAME}" \
 	    -configuration "${CONFIGURATION}" \
 	    -derivedDataPath "${DERIVED}" \
-	    -destination "${DESTINATION}" \
+	    -destination "${BUILD_DESTINATION}" \
 	    -resultBundlePath "${RESULT_BUNDLE}" \
 	    CODE_SIGNING_ALLOWED=NO \
 	    CODE_SIGNING_REQUIRED=NO \
