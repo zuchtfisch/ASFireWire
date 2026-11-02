@@ -9,6 +9,7 @@
 #include "../../../Logging/Logging.hpp"
 #include "FirefaceRegisters.hpp"
 #include "FirefaceSettings.hpp"
+#include "FF800ControlSettings.hpp"
 #include "FirefaceClockStatus.hpp"
 #include "FF800TransmitStart.hpp"
 #include <algorithm>
@@ -72,6 +73,29 @@ public:
     [[nodiscard]] const std::optional<FirefaceSettings>* SavedSettingsSlot() const noexcept {
         return &lastDryRun_.settings;
     }
+    /// Prepare the candidate config image for a semantic FF800 control write.
+    /// Absolutely no register or flash I/O occurs. A future asynchronous
+    /// controller-queue writer must recheck route/generation immediately before
+    /// issuing any transaction and must update the confirmed applied state.
+    [[nodiscard]] std::expected<ConfigWords, IOReturn> PreviewFF800ControlWrite(
+        uint32_t parameterId, uint64_t valueKind, uint64_t valueBits) const noexcept {
+        if (model_ != FirefaceModel::kFF800) return std::unexpected(kIOReturnUnsupported);
+        if (!io_.IsRouteCurrent() || io_.Generation().value != stateGeneration_.value)
+            return std::unexpected(kIOReturnOffline);
+        if (Cancelled()) return std::unexpected(kIOReturnAborted);
+        if (!lastDryRun_.settings) return std::unexpected(kIOReturnNotReady);
+        FirefaceSettings basis = *lastDryRun_.settings;
+        // Match WriteConfig's clock policy, rather than resetting the clock
+        // to the saved autosync mode on an unrelated user-level change.
+        basis.clockMaster = true;
+        const auto image = EncodeFF800ControlParameter(
+            model_, basis, parameterId, valueKind, valueBits);
+        if (!image) return std::unexpected(
+            image.error() == FF800SettingError::kUnknownParameter
+                ? kIOReturnNotFound : kIOReturnBadArgument);
+        return *image;
+    }
+
     // FF800's callback operation owns the 5 ms wait; do not sleep again in the session.
     [[nodiscard]] std::optional<uint32_t> PostEnableDelayMs() const noexcept override {
         return model_ == FirefaceModel::kFF800 ? 0U : 5U;
