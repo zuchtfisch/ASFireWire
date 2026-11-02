@@ -44,8 +44,10 @@ public:
             return false;
         if (!state.Begin(request.requestId, request.generation)) return false;
         const std::weak_ptr<Shared> weak(shared_);
-        dispatch_(request, [weak, id = request.requestId, gen = request.generation](bool accepted) {
+        const uint64_t epoch = shared_->epoch;
+        dispatch_(request, [weak, epoch, id = request.requestId, gen = request.generation](bool accepted) {
             if (const auto shared = weak.lock()) {
+                if (shared->epoch != epoch) return;
                 // Production callbacks must be serialized onto the controller
                 // queue before accessing this state. Tests invoke sequentially.
                 if (!shared->state.TransportComplete(id, gen, accepted)) return;
@@ -60,6 +62,7 @@ public:
     }
 
     void Reset(uint32_t generation) {
+        ++shared_->epoch; // Invalidate callbacks even if ids/generation are reused.
         shared_->state.Reset(generation);
         expectedGeneration_ = generation;
         blocked_ = false;
@@ -84,7 +87,10 @@ public:
     }
 
 private:
-    struct Shared { FF800ControlWriteState state{}; };
+    struct Shared {
+        FF800ControlWriteState state{};
+        uint64_t epoch{0};
+    };
     std::shared_ptr<Shared> shared_;
     Dispatch dispatch_;
     bool blocked_{false};
