@@ -6,6 +6,7 @@
 // passes. See ASFWDriver/Bus/Timing/PostResetTiming.hpp for the model.
 
 #include <gtest/gtest.h>
+#include <limits>
 
 #include "ASFWDriver/Bus/Timing/IsoAllocationGate.hpp"
 #include "ASFWDriver/Bus/Timing/PostResetTimingCoordinator.hpp"
@@ -45,7 +46,7 @@ TEST(PostResetTiming, OnBusResetStarted_InvalidatesPreviousState) {
 
 TEST(PostResetTiming, DeadlinesNearUInt64LimitNeverWrapOpenEarly) {
     PostResetTimingCoordinator c;
-    constexpr uint64_t maxNs = UINT64_MAX;
+    constexpr uint64_t maxNs = std::numeric_limits<uint64_t>::max();
     constexpr uint64_t anchor = maxNs - 200 * kMs;
     c.OnSelfIDComplete(kGen, anchor);
 
