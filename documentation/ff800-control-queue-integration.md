@@ -49,20 +49,41 @@ host tests exercise queries while a device prepare stage is held, after
 reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
 register writes are introduced.
 
+### Live read-only scheduler observation (not a write permit)
+
+Selector 84 now attempts to obtain a **live diagnostic** by reading existing
+`AudioCoordinator::FF800SessionObservation(guid)` state only. The coordinator
+delegates to `AudioSessions::CoordinationSnapshot`, which never creates a
+session. The handler first identifies a non-quarantined RME Fireface **800**
+using the RME vendor and the FF800-specific unit version (not the shared
+FF400/FF800 root model number), then obtains the current registry route,
+checks `IsCurrent`, copies the session snapshot, and checks `IsCurrent`
+again. A monotonic timestamp marks the observation. Missing discovery,
+uncertain device family, absent session, retired route, or invalid clock
+returns the unavailable-only envelope instead.
+
+The route and session snapshots are **not atomic together**; even the second
+route check cannot prevent a reset immediately after IPC. A valid diagnostic
+only reports an observation. The app should compare GUID/generation with its
+own independently current discovery information and treat results as stale
+after removal/reset. Neither a valid `eligible-preview-only` reason nor a
+matching generation ever authorizes writes. The production FF800 register
+write path remains disabled. This update does not add Swift-side polling,
+DriverKit installation, or any new bus operation.
+
 ### Fail-closed read-only UserClient endpoint (selector 84)
 
 The UserClient now recognizes `kMethodGetFF800SessionDiagnostic = 84`.
 It requires exactly two GUID scalar input words (high/low), rejects zero GUIDs,
 and returns the 64-byte `ASFWFF800SessionDiagV1` structure via `OSData`.
-**It intentionally returns only `status=Unavailable`, `reason=Unknown`,
-and zero device/timestamp/generation values**. This is a functional,
-read-only IPC envelope, not a connected live status feed. The driver has no
-safe direct path from this handler to current audio-session ownership and
-independently checked route freshness yet. The method never creates a session,
+**It returns `status=Unavailable`, `reason=Unknown`,
+and zero device/timestamp/generation values whenever the live route or
+session cannot be validated**. This is a functional, read-only IPC envelope with best-effort live session
+and route observations. It is not a race-free device state feed. The method never creates a session,
 takes an audio configuration lease, accesses the bus, or authorizes a write.
-The Swift UI still states that live FF800 diagnostics are unavailable.
-Future work must supply actual observations through an ownership-safe,
-non-blocking path and validate generations independently.
+The Swift UI still states that live FF800 diagnostics are unavailable because
+it has not been wired to method 84.
+Future work must add a Swift decoder and independent app-side freshness checks.
 
 ### Versioned, non-operational diagnostic wire contract
 
