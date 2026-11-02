@@ -106,7 +106,8 @@ class DriverViewModel: ObservableObject {
         }
     }
     
-    func installDriver(requireNewerBuild: Bool = DriverInstallSettings.defaultRequireNewerBuild) {
+    func installDriver(requireNewerBuild: Bool? = nil) {
+        let requireNewerBuild = requireNewerBuild ?? DriverInstallSettings.defaultRequireNewerBuild
         isBusy = true
         activationStatus = "Requesting driver installation…"
         log("Driver installation request submitted", source: .app, level: .info)
