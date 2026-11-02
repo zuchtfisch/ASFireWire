@@ -68,6 +68,10 @@ public:
     /// The settings block read by the last Configure, for diagnostics.
     [[nodiscard]] const std::optional<FlashSettings>& LastFlashSettings() const noexcept { return lastDryRun_.flash; }
     [[nodiscard]] const SettingsDryRun& LastSettingsDryRun() const noexcept { return lastDryRun_; }
+    /// Stable cache slot for the read-only control projection. Never a live voltage indication.
+    [[nodiscard]] const std::optional<FirefaceSettings>* SavedSettingsSlot() const noexcept {
+        return &lastDryRun_.settings;
+    }
     // FF800's callback operation owns the 5 ms wait; do not sleep again in the session.
     [[nodiscard]] std::optional<uint32_t> PostEnableDelayMs() const noexcept override {
         return model_ == FirefaceModel::kFF800 ? 0U : 5U;
