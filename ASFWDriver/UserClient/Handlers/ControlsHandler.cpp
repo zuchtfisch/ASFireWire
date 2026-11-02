@@ -5,6 +5,7 @@
 
 #include "ControlsHandler.hpp"
 #include "../../Audio/Controls/ControlService.hpp"
+#include "../../Audio/Protocols/RME/FF800SessionDiagnosticWire.hpp"
 #include "../../Audio/Controls/CoreAudioProjection.hpp"
 
 #include "../WireFormats/AVCDiscoveryDocument.hpp"
@@ -88,6 +89,22 @@ std::optional<AM::ParameterValue> DecodeValue(uint64_t kind, uint64_t bits) {
 }
 
 } // namespace
+
+kern_return_t ControlsHandler::GetFF800SessionDiagnostic(IOUserClientMethodArguments* args) {
+    // The live audio-session and route owners are not yet exposed here.
+    // Never invent a success or generate a session simply to answer IPC.
+    if (!args || !args->scalarInput || args->scalarInputCount != 2) {
+        return kIOReturnBadArgument;
+    }
+    if (GuidOf(args) == 0) return kIOReturnBadArgument;
+
+    const auto envelope = Audio::RME::FF800UnavailableDiagnosticV1();
+    OSData* data = OSData::withBytes(&envelope, static_cast<uint32_t>(sizeof(envelope)));
+    if (!data) return kIOReturnNoMemory;
+    args->structureOutput = data;
+    args->structureOutputDescriptor = nullptr;
+    return kIOReturnSuccess;
+}
 
 kern_return_t ControlsHandler::GetControlSnapshot(IOUserClientMethodArguments* args) {
     if (!discovery_) return kIOReturnNotReady;
