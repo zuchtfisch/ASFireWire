@@ -11,6 +11,39 @@ The config register is a **write-only**, three-quadlet FF800 register; a
 successful transport callback cannot confirm that any setting (especially
 phantom power) is physically active.
 
+## Confirmed audio-session execution model (code review)
+
+- `AudioSessions::Ensure(guid)` creates one `IODispatchQueue` per GUID
+  (`com.asfw.audio.session`). `AudioSessions` owns the queue and drains it
+  on teardown and erase.
+- `SessionScheduler::ArmPendingTimer` receives a timer callback on the
+  Default queue and posts **deferred restarts** to that per-device queue.
+- **The queue does not serialize every audio operation.**
+  `AudioSessions::Attach/Detach/ChangeClock/RequestRestart` forward directly
+  to `SessionScheduler`. Its own documentation says the caller that finds no
+  reconcile in progress runs it **on the caller's thread**, while subsequent
+  requests coalesce under a lock. Therefore posting a control write to the
+  restart queue alone would not exclude concurrent Configure/Stop/Start.
+- `FirefaceFamilyDriver::RunFF800Stage` blocks its family/session stage
+  while bus completions and timer work progress elsewhere. Do not block a
+  queue needed to dispatch those completions.
+- `FirefaceDeviceProtocol::UpdateRuntimeContext` calls
+  `RefreshRouteGeneration`; `SyncGeneration` clears cached flash settings,
+  last transmitted configuration and control-write state on generation change.
+
+### Prototype-only admission gate
+
+`FF800ControlSessionGate.hpp` is a pure policy preview, tested without
+hardware. It refuses when CoreAudio is attached, audio is streaming, a
+reconcile/restart/clock change is pending, the device is retired or tearing
+down, or the route generation differs from the cached generation. **It is
+not connected to the production session state or transport and cannot grant
+permission to write.** A plain snapshot of these flags is insufficient:
+production integration must obtain an exclusive per-device configuration
+lease coordinated with `SessionScheduler::Submit/Reconcile` and recheck
+generation at dispatch. Even such a lease would not solve the missing full
+readback verification of the write-only FF800 config register.
+
 ## Required controller-queue contract before any real integration
 
 1. Run preview/baseline checks, request preparation, dispatch ownership, timeout
