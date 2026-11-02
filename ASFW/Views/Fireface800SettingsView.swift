@@ -162,6 +162,11 @@ struct Fireface800SettingsView: View {
         }
         .navigationTitle("Fireface 800")
         .task { refreshSavedSettings() }
+        .onChange(of: controls.isConnected) { _, _ in
+            // A connection change invalidates the old driver/session observation.
+            // Do not preserve a diagnostic from a previous UserClient connection.
+            controls.reload()
+        }
     }
 
 
@@ -219,6 +224,31 @@ struct Fireface800SettingsView: View {
     private var previewDiagnosticsSection: some View {
         GroupBox("FF800 control preview diagnostics (read only)") {
             VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Diagnostic device")
+                    Spacer()
+                    Picker("Diagnostic device", selection: Binding(
+                        get: { controls.selectedGUID },
+                        set: { controls.select($0) }
+                    )) {
+                        Text("No device selected").tag(Optional<UInt64>.none)
+                        ForEach(controls.devices) { device in
+                            Text(device.title).tag(Optional(device.guid))
+                        }
+                    }
+                    .labelsHidden()
+                    .frame(maxWidth: 270)
+                    .disabled(!controls.isConnected || controls.devices.isEmpty)
+                }
+                if let selected = controls.selectedDevice {
+                    Text("Selected GUID: \\(selected.guidHex)")
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.secondary)
+                }
+                Text("Only an FF800 identified by its FireWire ROM unit is queried. Other devices remain unavailable.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
                 if controls.isConnected, let diagnostic = controls.ff800Diagnostic,
                    diagnostic.deviceGuid == controls.selectedGUID {
                     Label(diagnostic.reason.description, systemImage: "info.circle")
