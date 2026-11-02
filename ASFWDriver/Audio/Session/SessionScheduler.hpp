@@ -80,6 +80,22 @@ struct SessionSnapshot {
     IOReturn lastStatus{kIOReturnSuccess};
 };
 
+/// Diagnostic-only view of configuration admission blockers. The mutable
+/// fields are copied together under SessionScheduler::lock_; retired/teardown
+/// are sampled separately. This is NOT an exclusive lease or write permit.
+struct SessionCoordinationSnapshot {
+    bool retired{true};
+    bool teardown{true};
+    bool halAttached{false};
+    bool streaming{false};
+    bool reconciling{false};
+    bool restartPending{false};
+    bool clockChangePending{false};
+    bool configurationRequested{false};
+    uint64_t requestedTicket{0};
+    uint64_t completedTicket{0};
+};
+
 class SessionScheduler final : public std::enable_shared_from_this<SessionScheduler> {
 public:
     using BindingSourceProvider = std::function<Runtime::IDirectAudioBindingSource*(uint64_t)>;
@@ -154,6 +170,8 @@ public:
     [[nodiscard]] uint64_t RunningRun() const noexcept;
     static constexpr uint64_t kNotRunning = ~uint64_t{0};
     [[nodiscard]] SessionSnapshot Snapshot() const noexcept;
+    /// Read-only diagnostic snapshot; never authorizes register writes.
+    [[nodiscard]] SessionCoordinationSnapshot CoordinationSnapshot() const noexcept;
 
 private:
     // What callers want. Edited under lock_, read by the reconcile as a copy.
