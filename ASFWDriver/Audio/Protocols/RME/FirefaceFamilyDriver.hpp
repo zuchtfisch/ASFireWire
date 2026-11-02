@@ -10,6 +10,7 @@
 #include "FirefaceRegisters.hpp"
 #include "FirefaceSettings.hpp"
 #include "FF800ControlSettings.hpp"
+#include "FF800ControlWriteState.hpp"
 #include "FirefaceClockStatus.hpp"
 #include "FF800TransmitStart.hpp"
 #include <algorithm>
@@ -69,6 +70,8 @@ public:
     /// The settings block read by the last Configure, for diagnostics.
     [[nodiscard]] const std::optional<FlashSettings>& LastFlashSettings() const noexcept { return lastDryRun_.flash; }
     [[nodiscard]] const SettingsDryRun& LastSettingsDryRun() const noexcept { return lastDryRun_; }
+    /// Future write-status bookkeeping; no transport is driven from this state.
+    [[nodiscard]] const FF800ControlWriteState& ControlWriteState() const noexcept { return controlWriteState_; }
     /// Stable cache slot for the read-only control projection. Never a live voltage indication.
     [[nodiscard]] const std::optional<FirefaceSettings>* SavedSettingsSlot() const noexcept {
         return &lastDryRun_.settings;
@@ -320,6 +323,7 @@ private:
             // Flash cache and the previous hardware write belong to the old
             // FireWire generation. Never expose stale saved settings after reset.
             lastDryRun_ = {};
+            controlWriteState_.Reset(current.value);
             lastHealthy_.reset();
             stateGeneration_ = current;
         }
@@ -630,6 +634,7 @@ private:
     AudioStreamRuntimeCaps caps_{};
     FW::Generation stateGeneration_{0};
     SettingsDryRun lastDryRun_{};
+    FF800ControlWriteState controlWriteState_{};
     std::optional<bool> lastHealthy_;  // last logged health, for edge-only logging
 };
 
