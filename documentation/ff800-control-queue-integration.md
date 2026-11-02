@@ -66,6 +66,13 @@ before displaying a diagnostic. For an unidentified device, the app avoids
 even sending the selector-84 request. It clears previously displayed diagnostic data on refresh and
 selection changes, and never polls in the background.
 
+The FF800 settings screen differentiates disconnected driver,
+no selection, unverified FF800 identity, unsupported selector 84 (for example,
+a connected older driver), unavailable/invalid packets, and route or
+identity changes detected across the read. These are **diagnostic
+availability reasons**, not device register states; the app never infers
+hardware power or control-write eligibility from them.
+
 The FF800 settings screen labels any accepted record as a **past
 scheduler observation**. A bus reset may occur immediately after the
 checks: neither this display nor the generation equality is a guarantee
