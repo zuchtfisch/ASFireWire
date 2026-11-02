@@ -37,7 +37,9 @@ public:
     /// externally before issuing another full-register image in production.
     [[nodiscard]] bool Start(FF800WriteEnvelope request) {
         auto& state = shared_->state;
-        if (!dispatch_ || blocked_ || !state.Prepare(request.requestId, request.generation, request.words))
+        if (!dispatch_ || blocked_ || state.Phase() == FF800ControlWritePhase::kUncertain ||
+            state.Phase() == FF800ControlWritePhase::kFailed ||
+            !state.Prepare(request.requestId, request.generation, request.words))
             return false;
         if (!state.Begin(request.requestId, request.generation)) return false;
         const std::weak_ptr<Shared> weak(shared_);
