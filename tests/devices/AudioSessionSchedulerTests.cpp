@@ -84,6 +84,31 @@ using SchedulerTest = ShapedSchedulerTest<kCmpDevice>;
 using ApogeeTest = ShapedSchedulerTest<kApogeeDevice>;
 using DiceQuietPeriodTest = ShapedSchedulerTest<kDiceDevice>;
 
+TEST_F(SchedulerTest, FF800DiagnosticReasonsDistinguishMissingSessionAndRouteState) {
+    using namespace ASFW::Audio::RME;
+    const FF800ControlRouteDiagnostics route{true, true, 99, 99};
+    const auto missing = ExplainFF800PreviewFromSnapshot(std::nullopt, route);
+    EXPECT_FALSE(missing.sessionKnown);
+    EXPECT_FALSE(missing.PreviewEligible());
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
+    const auto snapshot = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(snapshot.has_value());
+    const auto idle = ExplainFF800PreviewFromSnapshot(snapshot, route);
+    EXPECT_TRUE(idle.sessionKnown);
+    EXPECT_EQ(idle.reason, FF800PreviewBlockReason::kEligible);
+    EXPECT_TRUE(idle.PreviewEligible());
+    const auto disconnected = ExplainFF800PreviewFromSnapshot(snapshot, {false, true, 99, 99});
+    EXPECT_TRUE(disconnected.sessionKnown);
+    EXPECT_EQ(disconnected.reason, FF800PreviewBlockReason::kDisconnected);
+    const auto stale = ExplainFF800PreviewFromSnapshot(snapshot, {true, true, 98, 99});
+    EXPECT_EQ(stale.reason, FF800PreviewBlockReason::kGenerationMismatch);
+    auto pending = *snapshot;
+    pending.configurationRequested = false;
+    pending.requestedTicket = pending.completedTicket + 1;
+    EXPECT_EQ(ExplainFF800PreviewFromSnapshot(pending, route).reason,
+              FF800PreviewBlockReason::kConfigurationRequested);
+}
+
 TEST_F(SchedulerTest, FF800DiagnosticAdapterRejectsUnknownSessionAndStaleRoute) {
     using namespace ASFW::Audio::RME;
     const FF800ControlRouteDiagnostics route{true, true, 41, 41};
