@@ -42,6 +42,26 @@ public:
         return true;
     }
 
+    /// Audio has priority over control. In the simulated integration contract,
+    /// an incoming Start/Stop/Configure invalidates any outstanding control
+    /// token immediately; no callback or transport completion is awaited.
+    /// Production code must coordinate this with the session's own lock and
+    /// with the control dispatch/cancellation lifecycle.
+    void PreemptForAudioMutation() noexcept {
+        ++epoch_;
+        active_.reset();
+        audioBusy_ = true;
+    }
+
+    /// Retirement/teardown must invalidate a pending control without waiting
+    /// for its completion. Further acquisition is refused until a fresh
+    /// session and route are supplied by the caller.
+    void PreemptForDeviceLoss() noexcept {
+        ++epoch_;
+        active_.reset();
+        audioBusy_ = false;
+    }
+
     void EndAudioMutation() noexcept { audioBusy_ = false; }
 
     [[nodiscard]] bool Holds(FF800SimulatedLeaseToken token) const noexcept {
