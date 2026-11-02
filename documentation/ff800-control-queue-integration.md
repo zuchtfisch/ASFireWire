@@ -49,6 +49,19 @@ host tests exercise queries while a device prepare stage is held, after
 reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
 register writes are introduced.
 
+### Fireface 800 app presentation (reference-only)
+
+`Fireface800SettingsView` shows a read-only panel listing the stable
+preview blocker identifiers and explicitly stating that **no live per-device
+scheduler admission diagnosis is currently available over the app/driver
+boundary**. The panel only differentiates a disconnected driver from an
+unavailable session diagnosis. It does not synthesize an FF800 status from
+cached flash, draft UI values, or unrelated audio metrics. There is no new
+DriverKit IPC, bus read, register write, activation, or permission pathway.
+A future live status must first expose a versioned, read-only snapshot with
+device GUID, generation, route validity, session presence and freshness;
+the existing C++ preview result is not safe to reinterpret as write authority.
+
 ### Explainable preview rejection (diagnostic only)
 
 `ExplainFF800ControlSession` returns the first blocking
