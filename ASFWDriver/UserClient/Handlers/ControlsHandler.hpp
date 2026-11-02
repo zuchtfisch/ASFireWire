@@ -41,6 +41,11 @@ public:
     /// kIOReturnUnsupported when the device has no control projection.
     kern_return_t GetControlSnapshot(IOUserClientMethodArguments* args);
 
+    /// Read-only FF800 diagnostic ABI v1. Currently returns an explicit
+    /// unavailable envelope; it neither creates sessions nor accesses the bus.
+    /// scalarInput: guidHi, guidLo. structureOutput: 64-byte v1 envelope.
+    kern_return_t GetFF800SessionDiagnostic(IOUserClientMethodArguments* args);
+
     /// scalarInput: guidHi, guidLo, revision, parameterId, valueKind, valueBits.
     /// scalarOutput[0]: request id. Refusals (stale revision, unknown id, wrong
     /// kind, out of domain) return an error at once, before any bus traffic.
