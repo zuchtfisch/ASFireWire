@@ -632,6 +632,65 @@ TEST(FF800WireDispatchIntegrationTests, QueuedFakeAckAfterTimeoutNeverConfirmsWr
     EXPECT_EQ(writes.size(), 1U);
 }
 
+TEST(FF800ControlSessionGateTests, ExplainsEveryIndependentBlockingCondition) {
+    auto baseline = FF800ControlSessionConditions{};
+    baseline.connected = true;
+    baseline.retired = false;
+    baseline.teardown = false;
+    baseline.routeCurrent = true;
+    baseline.cachedGeneration = 99;
+    baseline.routeGeneration = 99;
+    using Reason = FF800PreviewBlockReason;
+    EXPECT_EQ(ExplainFF800ControlSession(baseline), Reason::kEligible);
+    EXPECT_STREQ(FF800PreviewBlockReasonName(Reason::kEligible), "eligible-preview-only");
+    struct Case {
+        void (*block)(FF800ControlSessionConditions&);
+        Reason expected;
+        const char* name;
+    };
+    const Case cases[] = {
+        {[](auto& s) { s.connected = false; }, Reason::kDisconnected, "disconnected"},
+        {[](auto& s) { s.retired = true; }, Reason::kRetired, "retired"},
+        {[](auto& s) { s.teardown = true; }, Reason::kTeardown, "teardown"},
+        {[](auto& s) { s.halAttached = true; }, Reason::kHalAttached, "hal-attached"},
+        {[](auto& s) { s.streaming = true; }, Reason::kStreaming, "streaming"},
+        {[](auto& s) { s.reconciling = true; }, Reason::kReconciling, "reconciling"},
+        {[](auto& s) { s.configurationRequested = true; }, Reason::kConfigurationRequested,
+         "configuration-requested"},
+        {[](auto& s) { s.restartPending = true; }, Reason::kRestartPending, "restart-pending"},
+        {[](auto& s) { s.clockChangePending = true; }, Reason::kClockChangePending,
+         "clock-change-pending"},
+        {[](auto& s) { s.routeCurrent = false; }, Reason::kRouteNotCurrent, "route-not-current"},
+        {[](auto& s) { s.routeGeneration = 100; }, Reason::kGenerationMismatch,
+         "generation-mismatch"},
+    };
+    for (const auto& entry : cases) {
+        auto blocked = baseline;
+        entry.block(blocked);
+        EXPECT_EQ(ExplainFF800ControlSession(blocked), entry.expected) << entry.name;
+        EXPECT_STREQ(FF800PreviewBlockReasonName(entry.expected), entry.name);
+        EXPECT_FALSE(CanPreviewFF800ControlSession(blocked)) << entry.name;
+    }
+}
+
+TEST(FF800ControlSessionGateTests, MultipleBlockersReportDeterministicPriority) {
+    auto conditions = FF800ControlSessionConditions{};
+    // All unsafe defaults: disconnected takes priority; never indicate eligible.
+    EXPECT_EQ(ExplainFF800ControlSession(conditions),
+              FF800PreviewBlockReason::kDisconnected);
+    conditions.connected = true;
+    EXPECT_EQ(ExplainFF800ControlSession(conditions), FF800PreviewBlockReason::kRetired);
+    conditions.retired = false;
+    EXPECT_EQ(ExplainFF800ControlSession(conditions), FF800PreviewBlockReason::kTeardown);
+    conditions.teardown = false;
+    conditions.streaming = true;
+    conditions.routeCurrent = false;
+    EXPECT_EQ(ExplainFF800ControlSession(conditions), FF800PreviewBlockReason::kStreaming);
+    conditions.streaming = false;
+    EXPECT_EQ(ExplainFF800ControlSession(conditions),
+              FF800PreviewBlockReason::kRouteNotCurrent);
+}
+
 TEST(FF800ControlSessionGateTests, OnlyQuiescentCurrentRouteCanPreview) {
     FF800ControlSessionConditions session{};
     session.connected = true;
