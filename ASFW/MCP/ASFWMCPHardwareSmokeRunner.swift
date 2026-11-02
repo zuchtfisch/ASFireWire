@@ -15,7 +15,7 @@ enum ASFWMCPHardwareSmokeDisposition: String, Equatable {
     case refused
 }
 
-struct ASFWMCPHardwareSmokeOptions: Equatable {
+struct ASFWMCPHardwareSmokeOptions: Equatable, Sendable {
     /// Must be set by the caller before any live-driver operation is issued.
     var hardwareAccessEnabled: Bool
     /// First of two gates required for a plan's mutating step.
@@ -82,9 +82,10 @@ struct ASFWMCPHardwareSmokeRunner<Driver: ASFWDriverControlling> {
     let core: ASFWMCPCore<Driver>
 
     func run(
-        plan: ASFWMCPHardwareSmokePlan = ASFWMCPHardwareSmokeHarness.defaultPlan(),
+        plan: ASFWMCPHardwareSmokePlan? = nil,
         options: ASFWMCPHardwareSmokeOptions = .disabled
     ) async -> ASFWMCPHardwareSmokeReport {
+        let plan = plan ?? ASFWMCPHardwareSmokeHarness.defaultPlan()
         guard options.hardwareAccessEnabled else {
             return ASFWMCPHardwareSmokeReport(
                 generation: nil,
