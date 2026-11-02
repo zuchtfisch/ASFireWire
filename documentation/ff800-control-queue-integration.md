@@ -125,18 +125,15 @@ with an explicit unavailable/stale fallback. This is not live hardware
 feedback or a guarantee of route freshness after returning to the app.
 Nothing grants access to the FF800 write-only 0x0000fc88f014 register.
 
-### Fireface 800 app presentation (reference-only)
+### Fireface 800 app presentation (read-only observation)
 
-`Fireface800SettingsView` shows a read-only panel listing the stable
-preview blocker identifiers and explicitly stating that **no live per-device
-scheduler admission diagnosis is currently available over the app/driver
-boundary**. The panel only differentiates a disconnected driver from an
-unavailable session diagnosis. It does not synthesize an FF800 status from
-cached flash, draft UI values, or unrelated audio metrics. There is no new
-DriverKit IPC, bus read, register write, activation, or permission pathway.
-A future live status must first expose a versioned, read-only snapshot with
-device GUID, generation, route validity, session presence and freshness;
-the existing C++ preview result is not safe to reinterpret as write authority.
+`Fireface800SettingsView` shows an accepted, read-only scheduler preview
+from IPC selector 84 after independent app discovery checks, or an explicit
+unavailable/stale message. It also lists the stable blocker identifiers as
+reference. The accepted record is a **past observation**, not continuously
+validated state, phantom-power feedback or write permission. Cached flash
+settings and local drafts never determine this result. No bus read, register
+write, activation or new permission pathway is introduced.
 
 ### Explainable preview rejection (diagnostic only)
 
