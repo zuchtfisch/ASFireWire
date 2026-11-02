@@ -4,6 +4,7 @@
 #include "Audio/Protocols/RME/FF800ControlWriteHarness.hpp"
 #include "Audio/Protocols/RME/FF800ControlWireImage.hpp"
 #include "Audio/Protocols/RME/FF800ControlPreviewGate.hpp"
+#include "Audio/Protocols/RME/FF800ControlSessionGate.hpp"
 #include <gtest/gtest.h>
 #include <vector>
 
@@ -629,5 +630,54 @@ TEST(FF800WireDispatchIntegrationTests, QueuedFakeAckAfterTimeoutNeverConfirmsWr
     EXPECT_FALSE(harness.Start({1006, 83, {4, 5, 6}}));
     EXPECT_EQ(writes.size(), 1U);
 }
+
+TEST(FF800ControlSessionGateTests, OnlyQuiescentCurrentRouteCanPreview) {
+    FF800ControlSessionConditions session{};
+    session.connected = true;
+    session.retired = false;
+    session.teardown = false;
+    session.routeCurrent = true;
+    session.cachedGeneration = 120;
+    session.routeGeneration = 120;
+    EXPECT_TRUE(CanPreviewFF800ControlSession(session));
+}
+
+TEST(FF800ControlSessionGateTests, RefusesEveryAudioTransitionAndHalAttachment) {
+    FF800ControlSessionConditions baseline{};
+    baseline.connected = true;
+    baseline.retired = false;
+    baseline.teardown = false;
+    baseline.routeCurrent = true;
+    baseline.cachedGeneration = 120;
+    baseline.routeGeneration = 120;
+    auto check = [&](auto setter) {
+        auto session = baseline;
+        setter(session);
+        EXPECT_FALSE(CanPreviewFF800ControlSession(session));
+    };
+    check([](auto& s) { s.halAttached = true; });
+    check([](auto& s) { s.streaming = true; });
+    check([](auto& s) { s.reconciling = true; });
+    check([](auto& s) { s.restartPending = true; });
+    check([](auto& s) { s.clockChangePending = true; });
+    check([](auto& s) { s.retired = true; });
+    check([](auto& s) { s.teardown = true; });
+    check([](auto& s) { s.connected = false; });
+}
+
+TEST(FF800ControlSessionGateTests, RefusesStaleRouteDespiteIdleSession) {
+    FF800ControlSessionConditions session{};
+    session.connected = true;
+    session.retired = false;
+    session.teardown = false;
+    session.routeCurrent = true;
+    session.cachedGeneration = 100;
+    session.routeGeneration = 101;
+    EXPECT_FALSE(CanPreviewFF800ControlSession(session));
+    session.cachedGeneration = 101;
+    session.routeCurrent = false;
+    EXPECT_FALSE(CanPreviewFF800ControlSession(session));
+}
+
 
 } // namespace
