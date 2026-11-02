@@ -98,7 +98,7 @@ reasons/flags and nonzero reserved fields. Route freshness classification is
 separate: it must compare against an independently supplied expected bus
 generation. Matching generations do **not** make an observation race-free.
 
-**The ABI is now exposed as an unavailable-only UserClient envelope.**
+**The ABI is now exposed as a best-effort, read-only UserClient diagnostic.**
 No live driver publication, Swift decoder, or live UI update is part of
 this step. The Fireface 800 view continues to say that session diagnostics are
 unavailable and only lists blocker codes as reference. The standalone v1
