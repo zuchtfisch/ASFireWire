@@ -81,6 +81,8 @@ public:
         kMethodGetAudioObserverState = 67,
         // One page of a unit's versioned discovery document (AVCDiscoveryDocument.hpp).
         kMethodGetAVCDiscoveryDocument = 68,
+        // Read-only FF800 diagnostic v1 envelope; unavailable until live observations are wired.
+        kMethodGetFF800SessionDiagnostic = 84,
         // TODO(ASFW-IRM): Remove temporary IRM test method after dedicated validation tooling exists.
         kMethodTestIRMAllocation       = 26,
         kMethodTestIRMRelease          = 27,
