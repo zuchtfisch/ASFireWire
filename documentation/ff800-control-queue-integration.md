@@ -119,13 +119,11 @@ reasons/flags and nonzero reserved fields. Route freshness classification is
 separate: it must compare against an independently supplied expected bus
 generation. Matching generations do **not** make an observation race-free.
 
-**The ABI is now exposed as a best-effort, read-only UserClient diagnostic.**
-No live driver publication, Swift decoder, or live UI update is part of
-this step. The Fireface 800 view continues to say that session diagnostics are
-unavailable and only lists blocker codes as reference. The standalone v1
-structure is a proposed contract for future read-only plumbing, not evidence
-that those measurements exist in a running driver. Nothing grants access to
-the FF800 write-only 0x0000fc88f014 register.
+**The ABI is exposed as a best-effort, read-only UserClient diagnostic.**
+The Swift decoder and FF800 UI support accepted scheduler observations,
+with an explicit unavailable/stale fallback. This is not live hardware
+feedback or a guarantee of route freshness after returning to the app.
+Nothing grants access to the FF800 write-only 0x0000fc88f014 register.
 
 ### Fireface 800 app presentation (reference-only)
 
