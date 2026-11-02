@@ -31,6 +31,24 @@ phantom power) is physically active.
   `RefreshRouteGeneration`; `SyncGeneration` clears cached flash settings,
   last transmitted configuration and control-write state on generation change.
 
+### Read-only production session coordination snapshot
+
+`SessionScheduler::CoordinationSnapshot()` now copies audio-relevant state
+from the **existing scheduler lock** into a diagnostic structure:
+HAL attachment, running/reconciling state, restart and clock-change requests,
+pending reconcile tickets, device retirement, and teardown. Its counterpart
+`AudioSessions::CoordinationSnapshot(guid)` reads only an **existing**
+session via `Find`; unlike `Ensure`, it does not create one.
+
+This is a read-only production code path, deliberately **not** used for FF800
+write admission. The retired/teardown flags are atomics sampled outside the
+scheduler lock; and even fields copied under the lock may change immediately
+after its release. A snapshot that appears idle therefore cannot grant a
+configuration lease or authorize a control write. The C++ session scheduler
+host tests exercise queries while a device prepare stage is held, after
+reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
+register writes are introduced.
+
 ### Prototype-only admission gate
 
 `FF800ControlSessionGate.hpp` is a pure policy preview, tested without
