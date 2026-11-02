@@ -49,6 +49,21 @@ host tests exercise queries while a device prepare stage is held, after
 reconciliation, on an unknown GUID, and on retirement/teardown. No hardware
 register writes are introduced.
 
+### Fail-closed read-only UserClient endpoint (selector 84)
+
+The UserClient now recognizes `kMethodGetFF800SessionDiagnostic = 84`.
+It requires exactly two GUID scalar input words (high/low), rejects zero GUIDs,
+and returns the 64-byte `ASFWFF800SessionDiagV1` structure via `OSData`.
+**It intentionally returns only `status=Unavailable`, `reason=Unknown`,
+and zero device/timestamp/generation values**. This is a functional,
+read-only IPC envelope, not a connected live status feed. The driver has no
+safe direct path from this handler to current audio-session ownership and
+independently checked route freshness yet. The method never creates a session,
+takes an audio configuration lease, accesses the bus, or authorizes a write.
+The Swift UI still states that live FF800 diagnostics are unavailable.
+Future work must supply actual observations through an ownership-safe,
+non-blocking path and validate generations independently.
+
 ### Versioned, non-operational diagnostic wire contract
 
 `ASFWDriver/Shared/ASFWFF800SessionDiagnosticsABI.h` declares a standalone
@@ -62,8 +77,8 @@ reasons/flags and nonzero reserved fields. Route freshness classification is
 separate: it must compare against an independently supplied expected bus
 generation. Matching generations do **not** make an observation race-free.
 
-**Not connected to DriverKit IPC:** no method selector, handler, UserClient
-memory copy, driver publication, Swift decoder, or live UI update is part of
+**The ABI is now exposed as an unavailable-only UserClient envelope.**
+No live driver publication, Swift decoder, or live UI update is part of
 this step. The Fireface 800 view continues to say that session diagnostics are
 unavailable and only lists blocker codes as reference. The standalone v1
 structure is a proposed contract for future read-only plumbing, not evidence
