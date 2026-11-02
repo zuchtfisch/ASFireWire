@@ -10,7 +10,7 @@
 #include "../../DeviceProfiles/Audio/AudioDeviceIds.hpp"
 #include "../../Service/DriverContext.hpp"
 #include "ASFWDriver.h"
-#include <time.h>
+#include <mach/mach_time.h>
 #include "../../Audio/Controls/CoreAudioProjection.hpp"
 
 #include "../WireFormats/AVCDiscoveryDocument.hpp"
@@ -126,13 +126,18 @@ kern_return_t ControlsHandler::GetFF800SessionDiagnostic(IOUserClientMethodArgum
             // A session snapshot is useful for diagnosis but never sufficient
             // for authorization. Recheck route ownership after the snapshot.
             if (session && registry.IsCurrent(*route)) {
-                std::timespec now{};
-                if (clock_gettime(CLOCK_MONOTONIC, &now) == 0 && now.tv_sec >= 0) {
-                    const uint64_t ns = static_cast<uint64_t>(now.tv_sec) * 1'000'000'000ULL +
-                                        static_cast<uint64_t>(now.tv_nsec);
-                    envelope = Audio::RME::BuildFF800DiagnosticV1(
-                        guid, ns, session,
-                        {true, true, route->generation.value, route->generation.value});
+                // Match DiagnosticsService's DriverKit-supported monotonic
+                // clock; POSIX clock_gettime/timespec are unavailable here.
+                mach_timebase_info_data_t timebase{};
+                if (mach_timebase_info(&timebase) == KERN_SUCCESS &&
+                    timebase.denom != 0 && timebase.numer != 0) {
+                    const uint64_t ns =
+                        (mach_absolute_time() * timebase.numer) / timebase.denom;
+                    if (ns != 0) {
+                        envelope = Audio::RME::BuildFF800DiagnosticV1(
+                            guid, ns, session,
+                            {true, true, route->generation.value, route->generation.value});
+                    }
                 }
             }
         }
