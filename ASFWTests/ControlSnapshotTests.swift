@@ -683,6 +683,7 @@ struct FF800SessionDiagnosticWireTests {
         let model = DeviceControlsViewModel(source: driver)
         model.select(guid)
         #expect(model.ff800Diagnostic?.reason == .streaming)
+        #expect(model.ff800DiagnosticAvailability == .observationAvailable)
         #expect(driver.diagnosticReads == 1)
         #expect(driver.writes.isEmpty)
         #expect(driver.polls == 0)
@@ -690,6 +691,10 @@ struct FF800SessionDiagnosticWireTests {
         driver.diagnosticReply = .failure(.driver(kIOReturnNotReady))
         model.refreshFF800Diagnostic()
         #expect(model.ff800Diagnostic == nil)
+        #expect(model.ff800DiagnosticAvailability == .diagnosticUnavailable)
+        driver.diagnosticReply = .failure(.driver(kIOReturnUnsupported))
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800DiagnosticAvailability == .driverDoesNotSupportDiagnostic)
         #expect(driver.writes.isEmpty)
     }
 
@@ -700,6 +705,7 @@ struct FF800SessionDiagnosticWireTests {
         let model = DeviceControlsViewModel(source: driver)
         model.select(guid)
         #expect(model.ff800Diagnostic == nil)
+        #expect(model.ff800DiagnosticAvailability == .staleOrChanged)
         #expect(driver.diagnosticReads == 1)
         #expect(driver.writes.isEmpty)
     }
@@ -712,6 +718,7 @@ struct FF800SessionDiagnosticWireTests {
         driver.discoveryReplies = [[discovered(unitVersion: 2)]]
         model.select(guid)
         #expect(model.ff800Diagnostic == nil)
+        #expect(model.ff800DiagnosticAvailability == .deviceNotIdentified)
         #expect(driver.diagnosticReads == 0)
 
         driver.discoveryReplies = [[discovered(unitVersion: 0)]]
@@ -757,7 +764,20 @@ struct FF800SessionDiagnosticWireTests {
         driver.isConnected = false
         model.reload()
         #expect(model.ff800Diagnostic == nil)
+        #expect(model.ff800DiagnosticAvailability == .notChecked)
         #expect(driver.writes.isEmpty)
+    }
+
+    @Test func availabilityExplainsNoSelectionAndDisconnectedDriver() {
+        let driver = FakeControlsDriver()
+        let model = DeviceControlsViewModel(source: driver)
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800DiagnosticAvailability == .noDeviceSelected)
+
+        driver.isConnected = false
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800DiagnosticAvailability == .driverDisconnected)
+        #expect(driver.diagnosticReads == 0)
     }
 
     @Test func rejectsUnavailableAndMalformedEnvelopes() {
