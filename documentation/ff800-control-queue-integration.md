@@ -77,7 +77,11 @@ The FF800 screen exposes a read-only diagnostic device picker and the selected
 GUID, so runtime IPC tests can verify which discovered device is being
 queried. Selecting a different device rechecks FF800 ROM identity; devices
 that are not confirmed FF800s never trigger selector 84. Connection changes
-reload and invalidate prior diagnostic observations.
+reload and invalidate prior diagnostic observations. A change to the
+app's observed topology bus generation also clears any previously accepted
+FF800 session preview and marks it stale; this invalidation performs **no
+additional IPC or bus I/O**. It is a best-effort UI safeguard, not an
+atomic guarantee against a reset that has not yet been reported to the app.
 
 The FF800 settings screen labels any accepted record as a **past
 scheduler observation**. A bus reset may occur immediately after the
