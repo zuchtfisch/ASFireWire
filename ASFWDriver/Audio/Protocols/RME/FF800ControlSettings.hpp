@@ -22,7 +22,8 @@ enum class FF800Setting : uint8_t {
 
 enum class FF800SettingError : uint8_t {
     kInvalidValue,
-    kUnsupportedModel
+    kUnsupportedModel,
+    kUnknownParameter
 };
 
 /// An isolated, testable setting mutation. Values are the underlying enum
@@ -67,6 +68,8 @@ WithFF800Setting(FirefaceModel model, const FirefaceSettings& initial,
             return std::unexpected(FF800SettingError::kInvalidValue);
         changed.outputLevel = static_cast<OutputLevel>(value);
         break;
+    default:
+        return std::unexpected(FF800SettingError::kUnknownParameter);
     }
     return changed;
 }
@@ -80,5 +83,26 @@ EncodeFF800SettingChange(FirefaceModel model, const FirefaceSettings& initial,
     if (!changed) return std::unexpected(changed.error());
     return EncodeConfig(model, *changed);
 }
+
+    /// The parameter ids exported through asfw.controls.v1. Unlike an enum
+    /// cast, this refuses an unknown id before any configuration is produced.
+    /// The returned payload is a complete register image, NOT a flash write.
+    [[nodiscard]] inline std::expected<ConfigWords, FF800SettingError>
+    EncodeFF800ControlParameter(FirefaceModel model, const FirefaceSettings& initial,
+                                uint32_t parameterId, uint64_t valueKind,
+                                uint64_t valueBits) noexcept {
+        if (model != FirefaceModel::kFF800)
+            return std::unexpected(FF800SettingError::kUnsupportedModel);
+        if (parameterId < 0xF80001 || parameterId > 0xF80009)
+            return std::unexpected(FF800SettingError::kUnknownParameter);
+        const bool phantom = parameterId <= 0xF80004;
+        // UI transport: bool kind 0 / integer kind 2. No double, action,
+        // negative values, or noncanonical booleans are accepted.
+        if (valueKind != (phantom ? 0U : 2U) || valueBits > (phantom ? 1U : 2U))
+            return std::unexpected(FF800SettingError::kInvalidValue);
+        const auto setting = static_cast<FF800Setting>(parameterId - 0xF80001U);
+        return EncodeFF800SettingChange(model, initial, setting,
+                                        static_cast<uint32_t>(valueBits));
+    }
 
 } // namespace ASFW::Audio::RME
