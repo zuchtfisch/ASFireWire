@@ -191,15 +191,28 @@ final class DeviceControlsViewModel: ObservableObject {
     /// The driver response is checked against a distinct discovery read,
     /// including a second read to reject a reset observed during the IPC.
     /// There is no polling and no state change at the device.
+    private static func isIdentifiedFF800(_ device: FWDeviceInfo) -> Bool {
+        // FF400 and FF800 share a root model ID. Only the ROM unit version
+        // distinguishes them reliably; names are not identity evidence.
+        device.state == .ready &&
+        device.vendorId == 0x000A35 &&
+        device.units.contains {
+            $0.specId == 0x000A35 && $0.swVersion == 0x000001
+        } &&
+        !device.units.contains {
+            $0.specId == 0x000A35 && $0.swVersion == 0x000002
+        }
+    }
+
     func refreshFF800Diagnostic() {
         ff800Diagnostic = nil
         guard source.isConnected, let guid = selectedGUID, guid != 0,
-              let before = source.getDiscoveredDevices()?.first(where: { $0.guid == guid })
+              let before = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
+              Self.isIdentifiedFF800(before)
         else { return }
-        guard before.state == .ready,
-              case .success(let bytes) = source.getFF800SessionDiagnostic(guid: guid),
+        guard case .success(let bytes) = source.getFF800SessionDiagnostic(guid: guid),
               let after = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
-              after.state == .ready,
+              Self.isIdentifiedFF800(after),
               before.generation == after.generation,
               before.nodeId == after.nodeId,
               let diagnostic = FF800SessionDiagnostic.decode(
