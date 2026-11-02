@@ -29,9 +29,13 @@ class FF800ControlWriteHarness final {
 public:
     using Completion = std::function<void(bool accepted)>;
     using Dispatch = std::function<void(const FF800WriteEnvelope&, Completion)>;
+    using ControllerTask = std::function<void()>;
+    using PostToController = std::function<void(ControllerTask)>;
 
-    explicit FF800ControlWriteHarness(Dispatch dispatch)
-        : shared_(std::make_shared<Shared>()), dispatch_(std::move(dispatch)) {}
+    explicit FF800ControlWriteHarness(Dispatch dispatch,
+                                       PostToController post = {})
+        : shared_(std::make_shared<Shared>()), dispatch_(std::move(dispatch)),
+          post_(std::move(post)) {}
 
     /// Reject concurrent requests. A prior ambiguous result MUST be resolved
     /// externally before issuing another full-register image in production.
@@ -45,18 +49,25 @@ public:
         if (!state.Begin(request.requestId, request.generation)) return false;
         const std::weak_ptr<Shared> weak(shared_);
         const uint64_t epoch = shared_->epoch;
-        dispatch_(request, [weak, epoch, id = request.requestId, gen = request.generation](bool accepted) {
-            if (const auto shared = weak.lock()) {
-                if (shared->epoch != epoch) return;
-                // Production callbacks must be serialized onto the controller
-                // queue before accessing this state. Tests invoke sequentially.
-                if (!shared->state.TransportComplete(id, gen, accepted)) return;
-                if (accepted) {
-                    // No full configuration readback is supported yet.
-                    // Leave the result uncertain; never report verified.
-                    (void)shared->state.MarkUnverifiable(id, gen);
+        // A real transport can complete on an arbitrary callback thread.
+        // The injected PostToController is responsible for serializing that
+        // completion with Start/Reset/Timeout/Cancel on the controller queue.
+        // The default inline path is ONLY for existing single-threaded tests.
+        const auto post = post_;
+        dispatch_(request, [weak, epoch, id = request.requestId, gen = request.generation,
+                            post](bool accepted) {
+            ControllerTask deliver = [weak, epoch, id, gen, accepted] {
+                if (const auto shared = weak.lock()) {
+                    if (shared->epoch != epoch) return;
+                    if (!shared->state.TransportComplete(id, gen, accepted)) return;
+                    if (accepted) {
+                        // Transport ACK never proves the physical setting.
+                        (void)shared->state.MarkUnverifiable(id, gen);
+                    }
                 }
-            }
+            };
+            if (post) post(std::move(deliver));
+            else deliver();
         });
         return true;
     }
@@ -93,6 +104,7 @@ private:
     };
     std::shared_ptr<Shared> shared_;
     Dispatch dispatch_;
+    PostToController post_;
     bool blocked_{false};
     std::optional<uint32_t> expectedGeneration_{};
 };
