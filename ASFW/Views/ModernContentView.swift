@@ -331,6 +331,9 @@ struct ModernContentView: View {
         }
         .onChange(of: debugVM.topologyCache?.generation) { _, _ in
             topologyVM.refresh()
+            // A topology generation transition may retire the FF800 route.
+            // Invalidate the prior scheduler observation without any new IPC.
+            ff800ControlsVM.invalidateFF800Diagnostic()
         }
         .onChange(of: visibleSections) { _, sections in
             selectedSection = SidebarSection.resolvedSelection(selectedSection, visible: sections)
