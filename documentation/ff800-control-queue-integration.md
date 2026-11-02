@@ -58,6 +58,11 @@ HAL/stream/reconcile/restart/clock states, retirement, teardown, disconnected
 or stale routes, and **outstanding requested versus completed scheduler tickets**.
 The mapping is exercised against live host-test `AudioSessions` snapshots at
 idle, during a held start stage, while streaming, after StopIO and at retirement.
+Additional host tests exercise a held StopIO, cancellation/teardown, and route
+invalidation on bus reset. The bus-reset test deliberately demonstrates that
+reusing *both* old session and old route facts can still yield a positive
+preview; only fresh, independently validated route facts can veto it. This
+is why the preview can never be used as a transport write permit.
 
 The caller must supply genuine route/cache facts: the adapter does not read
 the bus, discover nodes, acquire session locks across dispatch, or validate
