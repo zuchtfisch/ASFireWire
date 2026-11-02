@@ -37,7 +37,7 @@ public:
     /// externally before issuing another full-register image in production.
     [[nodiscard]] bool Start(FF800WriteEnvelope request) {
         auto& state = shared_->state;
-        if (!dispatch_ || !state.Prepare(request.requestId, request.generation, request.words))
+        if (!dispatch_ || blocked_ || !state.Prepare(request.requestId, request.generation, request.words))
             return false;
         if (!state.Begin(request.requestId, request.generation)) return false;
         const std::weak_ptr<Shared> weak(shared_);
@@ -56,14 +56,18 @@ public:
         return true;
     }
 
-    void Reset(uint32_t generation) { shared_->state.Reset(generation); }
+    void Reset(uint32_t generation) { shared_->state.Reset(generation); blocked_ = false; }
 
     [[nodiscard]] bool Timeout(uint64_t id, uint32_t generation) {
-        return shared_->state.Abandon(id, generation, true);
+        const bool changed = shared_->state.Abandon(id, generation, true);
+        if (changed) blocked_ = true;
+        return changed;
     }
 
     [[nodiscard]] bool Cancel(uint64_t id, uint32_t generation) {
-        return shared_->state.Abandon(id, generation, false);
+        const bool changed = shared_->state.Abandon(id, generation, false);
+        if (changed) blocked_ = true;
+        return changed;
     }
 
     [[nodiscard]] FF800ControlWritePhase Phase() const noexcept { return shared_->state.Phase(); }
@@ -76,6 +80,7 @@ private:
     struct Shared { FF800ControlWriteState state{}; };
     std::shared_ptr<Shared> shared_;
     Dispatch dispatch_;
+    bool blocked_{false};
 };
 
 } // namespace ASFW::Audio::RME
