@@ -379,4 +379,53 @@ TEST(FF800ControlPreviewGateTests, ResetRequiresCacheAndWrittenImageReestablishe
         state.Phase(), cached, applied));
 }
 
+TEST(FF800TransportHarnessTests, SameGenerationResetCannotAcceptOldReusedRequestCallback) {
+    FF800ControlWriteHarness::Completion oldCompletion;
+    FF800ControlWriteHarness::Completion currentCompletion;
+    unsigned sends = 0;
+    FF800ControlWriteHarness harness(
+        [&](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion completion) {
+            if (++sends == 1) oldCompletion = std::move(completion);
+            else currentCompletion = std::move(completion);
+        });
+    harness.Reset(30);
+    ASSERT_TRUE(harness.Start({700, 30, {1, 2, 3}}));
+    harness.Reset(30); // A retry of the same route with a reused request ID.
+    ASSERT_TRUE(harness.Start({700, 30, {4, 5, 6}}));
+    ASSERT_TRUE(static_cast<bool>(oldCompletion));
+    ASSERT_TRUE(static_cast<bool>(currentCompletion));
+    oldCompletion(true);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kInFlight);
+    currentCompletion(false);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kFailed);
+    EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kTransport);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+}
+
+TEST(FF800TransportHarnessTests, DuplicateCallbackCannotChangeFinalOutcome) {
+    FF800ControlWriteHarness::Completion completion;
+    FF800ControlWriteHarness harness(
+        [&](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion callback) {
+            completion = std::move(callback);
+        });
+    ASSERT_TRUE(harness.Start({701, 31, {1, 2, 3}}));
+    ASSERT_TRUE(static_cast<bool>(completion));
+    completion(false);
+    completion(true); // A repeated callback must not change the result.
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kFailed);
+    EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kTransport);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+}
+
+TEST(FF800TransportHarnessTests, SynchronousCompletionCannotBeMistakenForVerification) {
+    FF800ControlWriteHarness harness(
+        [](const FF800WriteEnvelope&, FF800ControlWriteHarness::Completion completion) {
+            completion(true); // Completion occurs before Dispatch returns.
+        });
+    ASSERT_TRUE(harness.Start({702, 32, {1, 2, 3}}));
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+    EXPECT_FALSE(harness.Start({703, 32, {4, 5, 6}}));
+}
+
 } // namespace
