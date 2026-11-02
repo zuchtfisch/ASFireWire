@@ -58,7 +58,9 @@ nonzero timestamp, known-session/current-route flags and reserved fields.
 It also requires both wire generation fields to match the generation
 obtained from **separate** app-side device discovery. The viewmodel reads
 discovery before and after the IPC and refuses a changed generation or
-node ID. It clears previously displayed diagnostic data on refresh and
+node ID. Both discovery observations must also identify a ready device:
+suspended, removed, or not-yet-ready devices cannot produce a displayed
+diagnostic. It clears previously displayed diagnostic data on refresh and
 selection changes, and never polls in the background.
 
 The FF800 settings screen labels any accepted record as a **past
