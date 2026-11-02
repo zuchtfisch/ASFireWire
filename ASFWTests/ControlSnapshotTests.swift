@@ -524,6 +524,11 @@ final class FakeControlsDriver: DeviceControlsSource {
     private(set) var writes: [Write] = []
     private(set) var polls = 0
     var documentOverride: Data?
+    /// Optional scripted discovery for read-only FF800 IPC tests. The last
+    /// snapshot is repeated so tests can model a stable route or a reset.
+    var discoveryReplies: [[FWDeviceInfo]] = []
+    var diagnosticReply: Result<Data, ControlsDriverError> = .failure(.driver(kIOReturnUnsupported))
+    private(set) var diagnosticReads = 0
     private(set) var snapshotReads = 0
     private var level = "-10.5000"
     private var mute = "false"
@@ -534,7 +539,15 @@ final class FakeControlsDriver: DeviceControlsSource {
                      isoInputPlugs: 1, isoOutputPlugs: 1, extInputPlugs: 0, extOutputPlugs: 0)]
     }
 
-    func getDiscoveredDevices() -> [FWDeviceInfo]? { [] }
+    func getDiscoveredDevices() -> [FWDeviceInfo]? {
+        if discoveryReplies.count > 1 { return discoveryReplies.removeFirst() }
+        return discoveryReplies.first ?? []
+    }
+
+    func getFF800SessionDiagnostic(guid: UInt64) -> Result<Data, ControlsDriverError> {
+        diagnosticReads += 1
+        return diagnosticReply
+    }
 
     func getControlSnapshot(guid: UInt64) -> Result<Data, ControlsDriverError> {
         snapshotReads += 1
@@ -645,6 +658,65 @@ struct FF800SessionDiagnosticWireTests {
     @Test func rejectsForeignDeviceOrGeneration() {
         #expect(FF800SessionDiagnostic.decode(envelope(), guid: 42, discoveryGeneration: 9) == nil)
         #expect(FF800SessionDiagnostic.decode(envelope(), guid: guid, discoveryGeneration: 10) == nil)
+    }
+
+    private func discovered(_ generation: UInt32 = 9,
+                            state: DriverConnectorFWDeviceState = .ready,
+                            node: UInt8 = 3) -> FWDeviceInfo {
+        FWDeviceInfo(id: guid, guid: guid, vendorId: 0x000A35, modelId: 0x101800,
+                     vendorName: "RME", modelName: "Fireface 800", nodeId: node,
+                     generation: generation, state: state, units: [], deviceKind: 3)
+    }
+
+    @Test func viewModelDisplaysOnlyMatchingReadyObservation() {
+        let driver = FakeControlsDriver()
+        driver.discoveryReplies = [[discovered()]]
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+        model.select(guid)
+        #expect(model.ff800Diagnostic?.reason == .streaming)
+        #expect(driver.diagnosticReads == 1)
+        #expect(driver.writes.isEmpty)
+        #expect(driver.polls == 0)
+
+        driver.diagnosticReply = .failure(.driver(kIOReturnNotReady))
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.writes.isEmpty)
+    }
+
+    @Test func viewModelRejectsResetBetweenDiscoveryReads() {
+        let driver = FakeControlsDriver()
+        driver.discoveryReplies = [[discovered(9)], [discovered(10)]]
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+        model.select(guid)
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.diagnosticReads == 1)
+        #expect(driver.writes.isEmpty)
+    }
+
+    @Test func viewModelRejectsSuspendedOrRemovedDeviceAndDisconnect() {
+        let driver = FakeControlsDriver()
+        driver.discoveryReplies = [[discovered()]]
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+        model.select(guid)
+        #expect(model.ff800Diagnostic != nil)
+
+        driver.discoveryReplies = [[discovered(9, state: .suspended)]]
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.diagnosticReads == 1) // refusal before IPC
+
+        driver.discoveryReplies = [[]]
+        model.refreshFF800Diagnostic()
+        #expect(model.ff800Diagnostic == nil)
+
+        driver.isConnected = false
+        model.reload()
+        #expect(model.ff800Diagnostic == nil)
+        #expect(driver.writes.isEmpty)
     }
 
     @Test func rejectsUnavailableAndMalformedEnvelopes() {
