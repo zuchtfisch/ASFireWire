@@ -659,6 +659,7 @@ TEST(FF800ControlSessionGateTests, RefusesEveryAudioTransitionAndHalAttachment) 
     check([](auto& s) { s.halAttached = true; });
     check([](auto& s) { s.streaming = true; });
     check([](auto& s) { s.reconciling = true; });
+    check([](auto& s) { s.configurationRequested = true; });
     check([](auto& s) { s.restartPending = true; });
     check([](auto& s) { s.clockChangePending = true; });
     check([](auto& s) { s.retired = true; });
