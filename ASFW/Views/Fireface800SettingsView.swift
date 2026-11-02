@@ -84,6 +84,14 @@ struct Fireface800SettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .background(.orange.opacity(0.10), in: RoundedRectangle(cornerRadius: 10))
 
+                Label {
+                    Text("Saved values from the device can now be inspected under Device Controls after the driver has read the FF800 flash during audio configuration. They are cached settings, not live hardware feedback. This editor still does not apply changes.")
+                } icon: {
+                    Image(systemName: "info.circle")
+                }
+                .font(.callout)
+                .foregroundStyle(.secondary)
+
                 GroupBox("Microphone phantom power (48 V)") {
                     VStack(alignment: .leading, spacing: 12) {
                         Toggle("Input 7", isOn: $phantom7)
