@@ -73,6 +73,12 @@ identity changes detected across the read. These are **diagnostic
 availability reasons**, not device register states; the app never infers
 hardware power or control-write eligibility from them.
 
+The FF800 screen exposes a read-only diagnostic device picker and the selected
+GUID, so runtime IPC tests can verify which discovered device is being
+queried. Selecting a different device rechecks FF800 ROM identity; devices
+that are not confirmed FF800s never trigger selector 84. Connection changes
+reload and invalidate prior diagnostic observations.
+
 The FF800 settings screen labels any accepted record as a **past
 scheduler observation**. A bus reset may occur immediately after the
 checks: neither this display nor the generation equality is a guarantee
