@@ -76,9 +76,9 @@ Usage: $0 [--verbose] [--no-bump] [--adhoc] [--scheme NAME] [--config CONFIG] [-
                      see them)
   --scheme NAME      Override scheme (default: ${SCHEME_NAME})
   --config CONFIG    Override configuration (default: ${CONFIGURATION})
-  --arch ARCH        Pin build/test destination arch explicitly (default:
-                     generic Any Mac for build, local Mac for Swift tests;
-                     each target's ARCHS still governs the build)
+  --arch ARCH        Pin destination arch explicitly (default: local macOS,
+                     preserving each target's ARCHS; DriverKit Debug uses
+                     arm64e which cannot be pinned as a destination)
   --set KEY=VALUE    Append an xcodebuild build setting (repeatable)
   --derived PATH     Set DerivedData path (default: ${DERIVED})
 EOF
@@ -107,15 +107,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Builds can target "Any Mac" without selecting an arm64/x86_64 run
-# destination. This preserves each target's ARCHS (including DriverKit arm64e).
-# XCTest, unlike a build, must run on a concrete local Mac destination.
-# An explicit --arch retains the old per-architecture destination behavior.
+# The generic "Any Mac" destination triggers a multi-architecture app build
+# (including x86_64) and exposes additional Swift concurrency diagnostics.
+# Keep the established local macOS destination instead. Do not pin arm64:
+# DriverKit Debug targets intentionally use arm64e per project.yml.
+# Xcode may emit a harmless "multiple matching destinations" warning.
 if [[ -n "${ARCH_NAME}" ]]; then
   BUILD_DESTINATION="platform=macOS,arch=${ARCH_NAME}"
   TEST_DESTINATION="${BUILD_DESTINATION}"
 else
-  BUILD_DESTINATION="generic/platform=macOS"
+  BUILD_DESTINATION="platform=macOS"
   TEST_DESTINATION="platform=macOS"
 fi
 
