@@ -120,11 +120,18 @@ TEST(FF800WriteStateTests, OnlyCompleteMatchingReadbackIsVerified) {
     ASSERT_TRUE(state.TransportComplete(103, 5, true));
     ASSERT_TRUE(state.VerifyCompleteImage(103, 5, ConfigWords{1, 2, 4}));
     EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kFailed);
+    EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kVerificationMismatch);
     EXPECT_FALSE(state.VerifiedImage().has_value());
-    ASSERT_TRUE(state.Prepare(104, 5, ConfigWords{5, 6, 7}));
-    ASSERT_TRUE(state.Begin(104, 5));
-    ASSERT_TRUE(state.TransportComplete(104, 5, true));
-    ASSERT_TRUE(state.VerifyCompleteImage(104, 5, ConfigWords{5, 6, 7}));
+    // A mismatched image leaves the baseline unknown. A same-generation
+    // second full-image write must remain blocked, even in this pure test.
+    EXPECT_FALSE(state.Prepare(104, 5, ConfigWords{5, 6, 7}));
+    // Simulate a new bus generation. The production preview gate separately
+    // requires fresh flash and a newly recorded configuration baseline.
+    state.Reset(6);
+    ASSERT_TRUE(state.Prepare(104, 6, ConfigWords{5, 6, 7}));
+    ASSERT_TRUE(state.Begin(104, 6));
+    ASSERT_TRUE(state.TransportComplete(104, 6, true));
+    ASSERT_TRUE(state.VerifyCompleteImage(104, 6, ConfigWords{5, 6, 7}));
     EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kVerified);
     ASSERT_TRUE(state.VerifiedImage().has_value());
     EXPECT_EQ(*state.VerifiedImage(), (ConfigWords{5, 6, 7}));
