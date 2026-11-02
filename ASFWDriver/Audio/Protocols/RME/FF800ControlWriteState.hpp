@@ -50,6 +50,7 @@ public:
     [[nodiscard]] bool Prepare(uint64_t requestId, uint32_t generation,
                                ConfigWords image) noexcept {
         if (requestId == 0 || phase_ == FF800ControlWritePhase::kUncertain ||
+            phase_ == FF800ControlWritePhase::kFailed ||
             phase_ == FF800ControlWritePhase::kPrepared ||
             phase_ == FF800ControlWritePhase::kInFlight ||
             phase_ == FF800ControlWritePhase::kTransportAccepted)
