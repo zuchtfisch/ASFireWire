@@ -193,6 +193,90 @@ struct ControlSnapshotTests {
         #expect(throws: DecodingError.self) { try ControlSnapshot.decode(bad) }
     }
 
+    // MARK: FF800 cached-flash presentation (no driver or hardware I/O)
+
+    private static func ff800SavedDocument() throws -> [String: Any] {
+        let guid = "0x000aac0300b1d1f7"
+        let parameters: [[String: Any]] = (1...9).map { number in
+            let isPhantom = number <= 4
+            let id = 0xF80000 + number
+            return [
+                "id": id,
+                "name": "Saved parameter \\(number)",
+                "semantic": isPhantom ? "phantomPower" : (number <= 7 ? "source" : "nominalLevel"),
+                "target": ["node": 0xF800],
+                "domain": isPhantom ? ["kind": "bool"] as [String: Any]
+                    : ["kind": "enum", "values": [
+                        ["value": 0, "name": "Zero"],
+                        ["value": 1, "name": "One"],
+                        ["value": 2, "name": "Two"]
+                    ]] as [String: Any],
+                "value": isPhantom ? true as Any : 1 as Any,
+                "origin": "cached",
+                "access": "readOnly"
+            ]
+        }
+        return [
+            "schema": "asfw.controls.v1",
+            "guid": guid,
+            "family": "rme-ff800-flash",
+            "revision": 1,
+            "nodes": [["id": 0xF800, "name": "Flash", "kind": "processor"]],
+            "ports": [],
+            "parameters": parameters
+        ]
+    }
+
+    private static func ff800Snapshot(_ change: ((inout [String: Any]) -> Void)? = nil) throws -> ControlSnapshot {
+        var document = try ff800SavedDocument()
+        change?(&document)
+        return try ControlSnapshot.decode(JSONSerialization.data(withJSONObject: document))
+    }
+
+    @Test func ff800FlashAcceptsOnlyMatchingConnectedDevice() throws {
+        let snapshot = try Self.ff800Snapshot()
+        #expect(snapshot.isValidFF800SavedSettings(for: Self.guid, connected: true))
+        #expect(!snapshot.isValidFF800SavedSettings(for: Self.guid, connected: false))
+        #expect(!snapshot.isValidFF800SavedSettings(for: Self.guid + 1, connected: true))
+    }
+
+    @Test func ff800FlashRejectsOtherFamilyAndIncompleteSnapshot() throws {
+        let other = try Self.ff800Snapshot { $0["family"] = "avc" }
+        #expect(!other.isValidFF800SavedSettings(for: Self.guid, connected: true))
+        let incomplete = try Self.ff800Snapshot {
+            var parameters = $0["parameters"] as! [[String: Any]]
+            parameters.removeLast()
+            $0["parameters"] = parameters
+        }
+        #expect(!incomplete.isValidFF800SavedSettings(for: Self.guid, connected: true))
+    }
+
+    @Test func ff800FlashRejectsWrongProvenanceOrWritableValues() throws {
+        for (key, value) in [("origin", "observed"), ("access", "readWrite")] {
+            let snapshot = try Self.ff800Snapshot {
+                var parameters = $0["parameters"] as! [[String: Any]]
+                parameters[0][key] = value
+                $0["parameters"] = parameters
+            }
+            #expect(!snapshot.isValidFF800SavedSettings(for: Self.guid, connected: true))
+        }
+    }
+
+    @Test func ff800FlashRejectsWrongTypesAndOutOfRangeValues() throws {
+        let wrongType = try Self.ff800Snapshot {
+            var parameters = $0["parameters"] as! [[String: Any]]
+            parameters[0]["value"] = 1
+            $0["parameters"] = parameters
+        }
+        #expect(!wrongType.isValidFF800SavedSettings(for: Self.guid, connected: true))
+        let invalidChoice = try Self.ff800Snapshot {
+            var parameters = $0["parameters"] as! [[String: Any]]
+            parameters[7]["value"] = 99
+            $0["parameters"] = parameters
+        }
+        #expect(!invalidChoice.isValidFF800SavedSettings(for: Self.guid, connected: true))
+    }
+
     // MARK: Step snapping
 
     @Test func snapsOntoTheGridFromMin() {
