@@ -241,7 +241,7 @@ struct Fireface800SettingsView: View {
                     .disabled(!controls.isConnected || controls.devices.isEmpty)
                 }
                 if let selected = controls.selectedDevice {
-                    Text("Selected GUID: \\(selected.guidHex)")
+                    Text("Selected GUID: \(selected.guidHex)")
                         .font(.caption.monospaced())
                         .foregroundStyle(.secondary)
                 }
