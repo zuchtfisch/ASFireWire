@@ -103,7 +103,7 @@ nonisolated struct ControlConsoleLayout: Equatable, Sendable {
 }
 
 private extension ControlConsoleLayout.Role {
-    var rank: Int {
+    nonisolated var rank: Int {
         switch self {
         case .input: 0
         case .output: 1
