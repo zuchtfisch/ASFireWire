@@ -284,6 +284,10 @@ private:
             initialized_ = false;
             enabled_ = false;
             fetchOpened_ = false;
+            // Flash cache and the previous hardware write belong to the old
+            // FireWire generation. Never expose stale saved settings after reset.
+            lastDryRun_ = {};
+            lastHealthy_.reset();
             stateGeneration_ = current;
         }
     }
