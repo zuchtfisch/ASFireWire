@@ -3,6 +3,7 @@
 #include "Audio/Protocols/RME/FF800ControlWriteState.hpp"
 #include "Audio/Protocols/RME/FF800ControlWriteHarness.hpp"
 #include "Audio/Protocols/RME/FF800ControlWireImage.hpp"
+#include "Audio/Protocols/RME/FF800ControlPreviewGate.hpp"
 #include <gtest/gtest.h>
 
 namespace {
@@ -311,6 +312,71 @@ TEST(FF800WriteStateTests, CancellationBlocksNewPreparation) {
     EXPECT_FALSE(state.Prepare(506, 7, {4, 5, 6}));
     EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kCancelled);
     EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kUncertain);
+}
+
+TEST(FF800ControlPreviewGateTests, RequiresFreshMatchingWrittenBaseline) {
+    FirefaceSettings saved{};
+    saved.clockMaster = false;
+    FirefaceSettings forced = saved;
+    forced.clockMaster = true;
+    const ConfigWords actual = EncodeConfig(FirefaceModel::kFF800, forced);
+    EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        FF800ControlWritePhase::kIdle, saved, std::nullopt));
+    EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        FF800ControlWritePhase::kIdle, std::nullopt, actual));
+    EXPECT_TRUE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        FF800ControlWritePhase::kIdle, saved, actual));
+}
+
+TEST(FF800ControlPreviewGateTests, RefusesOtherModelsAndMismatchedImages) {
+    FirefaceSettings saved{};
+    saved.clockMaster = true;
+    const ConfigWords correct = EncodeConfig(FirefaceModel::kFF800, saved);
+    ConfigWords incorrect = correct;
+    incorrect[1] ^= 0x100U;
+    EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF400,
+        FF800ControlWritePhase::kIdle, saved, correct));
+    EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        FF800ControlWritePhase::kIdle, saved, incorrect));
+}
+
+TEST(FF800ControlPreviewGateTests, UncertainAndPendingWritesInvalidatePreview) {
+    FirefaceSettings saved{};
+    saved.clockMaster = true;
+    const ConfigWords applied = EncodeConfig(FirefaceModel::kFF800, saved);
+    for (const auto phase : {FF800ControlWritePhase::kPrepared,
+                             FF800ControlWritePhase::kInFlight,
+                             FF800ControlWritePhase::kTransportAccepted,
+                             FF800ControlWritePhase::kUncertain,
+                             FF800ControlWritePhase::kFailed}) {
+        EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+            phase, saved, applied));
+    }
+}
+
+TEST(FF800ControlPreviewGateTests, ResetRequiresCacheAndWrittenImageReestablished) {
+    FirefaceSettings saved{};
+    saved.clockMaster = true;
+    const ConfigWords written = EncodeConfig(FirefaceModel::kFF800, saved);
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(601, 12, written));
+    ASSERT_TRUE(state.Begin(601, 12));
+    ASSERT_TRUE(state.TransportComplete(601, 12, true));
+    ASSERT_TRUE(state.MarkUnverifiable(601, 12));
+    EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        state.Phase(), saved, written));
+    state.Reset(13);
+    // The real driver clears its flash settings and written image on reset.
+    std::optional<FirefaceSettings> cached;
+    std::optional<ConfigWords> applied;
+    EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        state.Phase(), cached, applied));
+    cached = saved;
+    EXPECT_FALSE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        state.Phase(), cached, applied));
+    applied = written;
+    EXPECT_TRUE(HasFF800ControlPreviewBaseline(FirefaceModel::kFF800,
+        state.Phase(), cached, applied));
 }
 
 } // namespace
