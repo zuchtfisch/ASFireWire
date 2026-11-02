@@ -49,7 +49,8 @@ public:
     /// queueing: otherwise two full register images could overwrite each other.
     [[nodiscard]] bool Prepare(uint64_t requestId, uint32_t generation,
                                ConfigWords image) noexcept {
-        if (requestId == 0 || phase_ == FF800ControlWritePhase::kPrepared ||
+        if (requestId == 0 || phase_ == FF800ControlWritePhase::kUncertain ||
+            phase_ == FF800ControlWritePhase::kPrepared ||
             phase_ == FF800ControlWritePhase::kInFlight ||
             phase_ == FF800ControlWritePhase::kTransportAccepted)
             return false;
