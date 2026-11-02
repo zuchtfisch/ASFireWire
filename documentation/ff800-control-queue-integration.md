@@ -44,6 +44,27 @@ lease coordinated with `SessionScheduler::Submit/Reconcile` and recheck
 generation at dispatch. Even such a lease would not solve the missing full
 readback verification of the write-only FF800 config register.
 
+### Simulated exclusive-lease contract (host tests only)
+
+`FF800SimulatedConfigLease.hpp` is a **single-threaded reference model** for
+how a future per-device configuration lease should behave:
+acquisition needs a quiescent, current session; an acquired token excludes a
+simulated audio mutation; an in-progress simulated audio mutation excludes a
+new token; releasing an older token cannot free the current owner; invalidation
+on bus reset revokes the old token even if a generation is later reused.
+
+This class neither acquires `SessionScheduler::lock_` nor makes
+`Submit/Reconcile` atomic with FF800 control-write admission. It is **not**
+used by production code, and it is not itself thread-safe. The actual
+audio-session scheduler is free to reconcile on a caller thread; adding the
+simulated lease to a callback queue would therefore not prevent real races.
+A real design needs a shared per-GUID coordination mechanism in the scheduler
+covering both audio mutation admission and control leases, with teardown and
+device retirement priority. Never hold a lock needed by FireWire completions
+while waiting for a device response. Without reliable full-image verification,
+real FF800 setting writes must stay disabled even if this concurrency blocker
+is eventually solved.
+
 ## Required controller-queue contract before any real integration
 
 1. Run preview/baseline checks, request preparation, dispatch ownership, timeout
