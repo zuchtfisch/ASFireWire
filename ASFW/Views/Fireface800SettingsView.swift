@@ -168,18 +168,10 @@ struct Fireface800SettingsView: View {
     // measurements. Do not render a snapshot left over from another device,
     // a disconnected driver, or a different control provider.
     private var validatedSavedSnapshot: ControlSnapshot? {
-        guard controls.isConnected,
-              let selected = controls.selectedDevice,
+        guard let guid = controls.selectedGUID,
               let snapshot = controls.snapshot,
-              snapshot.family == "rme-ff800-flash",
-              snapshot.guid.caseInsensitiveCompare(selected.guidHex) == .orderedSame,
-              snapshot.parameters.count == 9,
-              Set(snapshot.parameters.map(\.id)) == Set(UInt32(0xF80001)...UInt32(0xF80009)),
-              snapshot.parameters.allSatisfy({
-                  $0.access == .readOnly && $0.origin == .cached && $0.value != nil
-              }) else {
-            return nil
-        }
+              snapshot.isValidFF800SavedSettings(for: guid, connected: controls.isConnected)
+        else { return nil }
         return snapshot
     }
 
