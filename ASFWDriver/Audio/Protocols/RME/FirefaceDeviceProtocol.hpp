@@ -3,6 +3,7 @@
 #pragma once
 
 #include "FirefaceFamilyDriver.hpp"
+#include "FF800SavedSettingsControls.hpp"
 #include "../IDeviceProtocol.hpp"
 
 namespace ASFW::Audio::RME {
@@ -17,7 +18,7 @@ public:
                            Discovery::DeviceRegistry& registry,
                            const Discovery::DeviceRouteToken& route,
                            FirefaceModel model, bool s800, Scheduling::ITimerScheduler* scheduler = nullptr) noexcept
-        : registry_(registry), model_(model), io_(busOps, busInfo, registry, route), family_(io_, model, s800, scheduler) {}
+        : registry_(registry), model_(model), io_(busOps, busInfo, registry, route), family_(io_, model, s800, scheduler), savedControls_(family_.SavedSettingsSlot()) {}
 
     IOReturn Initialize() override { return family_.LoadGeometry(); }
     IOReturn Shutdown() override { family_.CancelPendingStart(true); return kIOReturnSuccess; }
@@ -35,6 +36,9 @@ public:
         callback(family_.LoadGeometry());
     }
     FamilyDriver* AsFamilyDriver() noexcept override { return &family_; }
+    Controls::IControlProvider* Controls() noexcept override {
+        return model_ == FirefaceModel::kFF800 ? &savedControls_ : nullptr;
+    }
     void UpdateRuntimeContext(const Discovery::DeviceRouteToken& route,
                               std::shared_ptr<ASFW::AVC::IAvcUnit>) override {
         io_.UpdateRoute(route);
@@ -58,6 +62,7 @@ private:
     FirefaceModel model_;
     Protocols::Ports::ProtocolRegisterIO io_;
     FirefaceFamilyDriver family_;
+    FF800SavedSettingsControls savedControls_;
 };
 
 } // namespace ASFW::Audio::RME
