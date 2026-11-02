@@ -83,11 +83,15 @@ public:
         if (!io_.IsRouteCurrent() || io_.Generation().value != stateGeneration_.value)
             return std::unexpected(kIOReturnOffline);
         if (Cancelled()) return std::unexpected(kIOReturnAborted);
-        if (!lastDryRun_.settings) return std::unexpected(kIOReturnNotReady);
+        if (!lastDryRun_.settings || !lastDryRun_.written)
+            return std::unexpected(kIOReturnNotReady);
         FirefaceSettings basis = *lastDryRun_.settings;
-        // Match WriteConfig's clock policy, rather than resetting the clock
-        // to the saved autosync mode on an unrelated user-level change.
+        // Match WriteConfig's clock policy. Never construct a candidate from
+        // flash alone when no successful register write is on record. This
+        // still is NOT proof of the current physical state/readback.
         basis.clockMaster = true;
+        if (EncodeConfig(model_, basis) != *lastDryRun_.written)
+            return std::unexpected(kIOReturnNotReady);
         const auto image = EncodeFF800ControlParameter(
             model_, basis, parameterId, valueKind, valueBits);
         if (!image) return std::unexpected(
