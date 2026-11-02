@@ -228,8 +228,8 @@ struct Fireface800SettingsView: View {
                 } else {
                     Label(
                         controls.isConnected
-                            ? "Session diagnostic unavailable or stale"
-                            : "Driver disconnected — session diagnostic unavailable",
+                            ? controls.ff800DiagnosticAvailability.message
+                            : "Driver disconnected — diagnostic unavailable",
                         systemImage: "info.circle"
                     )
                     .foregroundStyle(.secondary)
