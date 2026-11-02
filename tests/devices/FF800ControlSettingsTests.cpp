@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "Audio/Protocols/RME/FF800ControlSettings.hpp"
+#include "Audio/Protocols/RME/FF800ControlWriteState.hpp"
 #include <gtest/gtest.h>
 
 namespace {
@@ -81,6 +82,58 @@ TEST(FF800ControlSettingsTests, ControlIPCKnownValueProducesExpectedImage) {
               0xF80001, 0, 1).value(),
               EncodeFF800SettingChange(FirefaceModel::kFF800, original,
               FF800Setting::kPhantom7, 1).value());
+}
+
+TEST(FF800WriteStateTests, TransportAckIsNotHardwareConfirmation) {
+    FF800ControlWriteState state;
+    const ConfigWords candidate{1, 2, 3};
+    ASSERT_TRUE(state.Prepare(100, 5, candidate));
+    EXPECT_FALSE(state.Prepare(101, 5, candidate)); // one unresolved request
+    ASSERT_TRUE(state.Begin(100, 5));
+    ASSERT_TRUE(state.TransportComplete(100, 5, true));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kTransportAccepted);
+    EXPECT_FALSE(state.VerifiedImage().has_value());
+    ASSERT_TRUE(state.MarkUnverifiable(100, 5));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(state.VerifiedImage().has_value());
+}
+
+TEST(FF800WriteStateTests, LateCompletionAfterResetIsIgnored) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(102, 5, ConfigWords{1, 2, 3}));
+    ASSERT_TRUE(state.Begin(102, 5));
+    state.Reset(6);
+    EXPECT_FALSE(state.TransportComplete(102, 5, true));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kIdle);
+    EXPECT_FALSE(state.Candidate().has_value());
+    EXPECT_FALSE(state.VerifiedImage().has_value());
+}
+
+TEST(FF800WriteStateTests, OnlyCompleteMatchingReadbackIsVerified) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(103, 5, ConfigWords{1, 2, 3}));
+    ASSERT_TRUE(state.Begin(103, 5));
+    ASSERT_TRUE(state.TransportComplete(103, 5, true));
+    ASSERT_TRUE(state.VerifyCompleteImage(103, 5, ConfigWords{1, 2, 4}));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kFailed);
+    EXPECT_FALSE(state.VerifiedImage().has_value());
+    ASSERT_TRUE(state.Prepare(104, 5, ConfigWords{5, 6, 7}));
+    ASSERT_TRUE(state.Begin(104, 5));
+    ASSERT_TRUE(state.TransportComplete(104, 5, true));
+    ASSERT_TRUE(state.VerifyCompleteImage(104, 5, ConfigWords{5, 6, 7}));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kVerified);
+    ASSERT_TRUE(state.VerifiedImage().has_value());
+    EXPECT_EQ(*state.VerifiedImage(), (ConfigWords{5, 6, 7}));
+}
+
+TEST(FF800WriteStateTests, TransportFailureDoesNotUpdateState) {
+    FF800ControlWriteState state;
+    ASSERT_TRUE(state.Prepare(105, 9, ConfigWords{1, 2, 3}));
+    ASSERT_TRUE(state.Begin(105, 9));
+    ASSERT_TRUE(state.TransportComplete(105, 9, false));
+    EXPECT_EQ(state.Phase(), FF800ControlWritePhase::kFailed);
+    EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kTransport);
+    EXPECT_FALSE(state.VerifiedImage().has_value());
 }
 
 } // namespace
