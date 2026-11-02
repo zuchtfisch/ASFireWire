@@ -228,10 +228,10 @@ struct Fireface800SettingsView: View {
         // device registers. Restore the prior selection if none is available.
         let previousGUID = controls.selectedGUID
         controls.reload()
-        if controls.snapshot?.family == "rme-ff800-flash" { return }
+        if validatedSavedSnapshot != nil { return }
         for device in controls.devices where device.guid != controls.selectedGUID {
             controls.select(device.guid)
-            if controls.snapshot?.family == "rme-ff800-flash" { return }
+            if validatedSavedSnapshot != nil { return }
         }
         if let previousGUID, controls.devices.contains(where: { $0.guid == previousGUID }) {
             controls.select(previousGUID)
