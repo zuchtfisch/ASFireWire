@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 #include "Audio/Protocols/RME/FF800ControlSettings.hpp"
 #include "Audio/Protocols/RME/FF800ControlWriteState.hpp"
+#include "Audio/Protocols/RME/FF800ControlWriteHarness.hpp"
 #include <gtest/gtest.h>
 
 namespace {
@@ -155,6 +156,83 @@ TEST(FF800WriteStateTests, CancelledPreparedRequestCannotBeSent) {
     EXPECT_EQ(state.Failure(), FF800ControlWriteFailure::kCancelled);
     EXPECT_FALSE(state.Begin(202, 10));
     EXPECT_FALSE(state.VerifiedImage().has_value());
+}
+
+TEST(FF800TransportHarnessTests, AcceptedTransportIsNotVerifiedAndCannotAutoRetry) {
+    FF800ControlWriteHarness::Completion complete;
+    unsigned sends = 0;
+    FF800ControlWriteHarness harness([&](const FF800WriteEnvelope& request,
+                                         FF800ControlWriteHarness::Completion callback) {
+        ++sends;
+        EXPECT_EQ(request.words, (ConfigWords{1, 2, 3}));
+        complete = std::move(callback);
+    });
+    ASSERT_TRUE(harness.Start({301, 4, {1, 2, 3}}));
+    EXPECT_FALSE(harness.Start({302, 4, {4, 5, 6}}));
+    ASSERT_TRUE(static_cast<bool>(complete));
+    complete(true);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+    EXPECT_FALSE(harness.Start({303, 4, {4, 5, 6}}));
+    EXPECT_EQ(sends, 1U);
+}
+
+TEST(FF800TransportHarnessTests, TimedOutLateCompletionNeverVerifiesOrRetries) {
+    FF800ControlWriteHarness::Completion complete;
+    unsigned sends = 0;
+    FF800ControlWriteHarness harness([&](const FF800WriteEnvelope&,
+                                         FF800ControlWriteHarness::Completion callback) {
+        ++sends;
+        complete = std::move(callback);
+    });
+    ASSERT_TRUE(harness.Start({304, 8, {1, 2, 3}}));
+    ASSERT_TRUE(harness.Timeout(304, 8));
+    complete(true);
+    EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kTimedOut);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kUncertain);
+    EXPECT_FALSE(harness.Start({305, 8, {4, 5, 6}}));
+    EXPECT_EQ(sends, 1U);
+}
+
+TEST(FF800TransportHarnessTests, ResetRejectsOldCallbackAndAllowsNewGeneration) {
+    FF800ControlWriteHarness::Completion stale;
+    FF800ControlWriteHarness harness([&](const FF800WriteEnvelope&,
+                                         FF800ControlWriteHarness::Completion callback) {
+        stale = std::move(callback);
+    });
+    ASSERT_TRUE(harness.Start({306, 11, {1, 2, 3}}));
+    const auto old = stale;
+    harness.Reset(12);
+    old(true);
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kIdle);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+    EXPECT_TRUE(harness.Start({307, 12, {4, 5, 6}}));
+}
+
+TEST(FF800TransportHarnessTests, DestroyedHarnessIgnoresLateCallback) {
+    FF800ControlWriteHarness::Completion complete;
+    {
+        FF800ControlWriteHarness harness([&](const FF800WriteEnvelope&,
+                                             FF800ControlWriteHarness::Completion callback) {
+            complete = std::move(callback);
+        });
+        ASSERT_TRUE(harness.Start({308, 2, {1, 2, 3}}));
+    }
+    ASSERT_TRUE(static_cast<bool>(complete));
+    complete(true); // weak ownership: no dangling pointer to the harness
+    SUCCEED();
+}
+
+TEST(FF800TransportHarnessTests, RejectedTransportCannotBeMisreportedVerified) {
+    FF800ControlWriteHarness harness([](const FF800WriteEnvelope&,
+                                        FF800ControlWriteHarness::Completion callback) {
+        callback(false);
+    });
+    ASSERT_TRUE(harness.Start({309, 2, {1, 2, 3}}));
+    EXPECT_EQ(harness.Phase(), FF800ControlWritePhase::kFailed);
+    EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kTransport);
+    EXPECT_FALSE(harness.VerifiedImage().has_value());
+    EXPECT_FALSE(harness.Start({310, 2, {4, 5, 6}}));
 }
 
 } // namespace
