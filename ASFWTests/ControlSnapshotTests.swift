@@ -733,6 +733,33 @@ struct FF800SessionDiagnosticWireTests {
         #expect(driver.writes.isEmpty)
     }
 
+    @Test func viewModelRejectsDuplicateGUIDBeforeIPC() {
+        let driver = FakeControlsDriver()
+        driver.discoveryReplies = [[discovered(), discovered(unitVersion: 2)]]
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+        model.select(guid)
+        #expect(model.ff800Diagnostic == nil)
+        #expect(model.ff800DiagnosticAvailability == .deviceNotIdentified)
+        #expect(driver.diagnosticReads == 0)
+        #expect(driver.writes.isEmpty)
+    }
+
+    @Test func viewModelRejectsDuplicateGUIDAppearingDuringIPC() {
+        let driver = FakeControlsDriver()
+        driver.discoveryReplies = [
+            [discovered()],
+            [discovered(), discovered(unitVersion: 2)]
+        ]
+        driver.diagnosticReply = .success(envelope())
+        let model = DeviceControlsViewModel(source: driver)
+        model.select(guid)
+        #expect(model.ff800Diagnostic == nil)
+        #expect(model.ff800DiagnosticAvailability == .staleOrChanged)
+        #expect(driver.diagnosticReads == 1)
+        #expect(driver.writes.isEmpty)
+    }
+
     @Test func viewModelRejectsIdentityChangeDuringIPC() {
         let driver = FakeControlsDriver()
         driver.discoveryReplies = [[discovered()], [discovered(unitVersion: 2)]]
