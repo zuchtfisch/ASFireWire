@@ -18,6 +18,30 @@ enum ControlsDriverError: Error, Sendable, Equatable {
 }
 
 extension ASFWDriverConnector {
+    // MARK: - Read-only FF800 preview diagnosis (selector 84)
+
+    /// An observation of scheduler admission, not live register state and not
+    /// authorization for FireWire writes. No polling or retries on this path.
+    func getFF800SessionDiagnostic(guid: UInt64) -> Result<Data, ControlsDriverError> {
+        guard isConnected, connection != 0 else { return .failure(.notConnected) }
+        guard guid != 0 else { return .failure(.malformed("zero GUID")) }
+        let input: [UInt64] = [guid >> 32, guid & 0xFFFF_FFFF]
+        var output = Data(count: 64)
+        var outputSize = output.count
+        let status = output.withUnsafeMutableBytes { bytes in
+            input.withUnsafeBufferPointer { scalars in
+                IOConnectCallMethod(connection, Method.getFF800SessionDiagnostic.rawValue,
+                                    scalars.baseAddress, UInt32(scalars.count),
+                                    nil, 0, nil, nil, bytes.baseAddress, &outputSize)
+            }
+        }
+        guard status == KERN_SUCCESS else { return .failure(.driver(status)) }
+        guard outputSize == 64 else {
+            return .failure(.malformed("FF800 diagnostic envelope size \\(outputSize)"))
+        }
+        return .success(output)
+    }
+
     // MARK: - Device controls (selectors 80-82)
 
     /// The device's "asfw.controls.v1" document, read page by page like the
