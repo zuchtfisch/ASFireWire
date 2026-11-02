@@ -2,6 +2,7 @@
 #include "Audio/Protocols/RME/FF800ControlSettings.hpp"
 #include "Audio/Protocols/RME/FF800ControlWriteState.hpp"
 #include "Audio/Protocols/RME/FF800ControlWriteHarness.hpp"
+#include "Audio/Protocols/RME/FF800ControlWireImage.hpp"
 #include <gtest/gtest.h>
 
 namespace {
@@ -233,6 +234,50 @@ TEST(FF800TransportHarnessTests, RejectedTransportCannotBeMisreportedVerified) {
     EXPECT_EQ(harness.Failure(), FF800ControlWriteFailure::kTransport);
     EXPECT_FALSE(harness.VerifiedImage().has_value());
     EXPECT_FALSE(harness.Start({310, 2, {4, 5, 6}}));
+}
+
+TEST(FF800ControlWireImageTests, UsesExactFF800ConfigurationRegisterAndTwelveBytes) {
+    constexpr auto image = MakeFF800ControlWireImage({0, 0, 0});
+    static_assert(FF800ControlWireImage::kByteCount == 12);
+    EXPECT_EQ(image.address, Register::kFF800Config);
+    EXPECT_EQ(image.address, 0x0000fc88f014ULL);
+    EXPECT_EQ(image.payload.size(), 12U);
+}
+
+TEST(FF800ControlWireImageTests, SerializesAllThreeWordsLittleEndian) {
+    const auto image = MakeFF800ControlWireImage({0x12345678, 0x90abcdef, 0x01020304});
+    const std::array<uint8_t, 12> expected{
+        0x78, 0x56, 0x34, 0x12,
+        0xef, 0xcd, 0xab, 0x90,
+        0x04, 0x03, 0x02, 0x01
+    };
+    EXPECT_EQ(image.payload, expected);
+}
+
+TEST(FF800ControlWireImageTests, ProducesImageFromExistingSemanticSettingsEncoder) {
+    FirefaceSettings saved{};
+    saved.clockMaster = true;
+    const auto candidate = EncodeFF800ControlParameter(
+        FirefaceModel::kFF800, saved, 0xF80006, 2, 0);
+    ASSERT_TRUE(candidate.has_value());
+    const auto image = MakeFF800ControlWireImage(*candidate);
+    for (size_t i = 0; i < candidate->size(); ++i) {
+        uint32_t assembled = 0;
+        for (size_t byte = 0; byte < 4; ++byte)
+            assembled |= static_cast<uint32_t>(image.payload[i * 4 + byte]) << (8 * byte);
+        EXPECT_EQ(assembled, (*candidate)[i]);
+    }
+}
+
+TEST(FF800TransportHarnessTests, RefusesPreviousGenerationAfterReset) {
+    unsigned sends = 0;
+    FF800ControlWriteHarness harness([&](const FF800WriteEnvelope&,
+                                         FF800ControlWriteHarness::Completion) { ++sends; });
+    harness.Reset(17);
+    EXPECT_FALSE(harness.Start({401, 16, {1, 2, 3}}));
+    EXPECT_EQ(sends, 0U);
+    EXPECT_TRUE(harness.Start({402, 17, {1, 2, 3}}));
+    EXPECT_EQ(sends, 1U);
 }
 
 } // namespace
