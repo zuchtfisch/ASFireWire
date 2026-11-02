@@ -10,6 +10,7 @@ protocol DeviceControlsSource: AnyObject {
     func getAVCUnits() -> [AVCUnitInfo]?
     func getDiscoveredDevices() -> [FWDeviceInfo]?
     func getControlSnapshot(guid: UInt64) -> Result<Data, ControlsDriverError>
+    func getFF800SessionDiagnostic(guid: UInt64) -> Result<Data, ControlsDriverError>
     func setControlParameter(guid: UInt64, revision: UInt64, parameterId: UInt32,
                              value: ControlValue) -> Result<UInt64, ControlsDriverError>
     func setControlRoute(guid: UInt64, revision: UInt64, routerId: UInt32,
@@ -18,6 +19,9 @@ protocol DeviceControlsSource: AnyObject {
 }
 
 extension DeviceControlsSource {
+    func getFF800SessionDiagnostic(guid: UInt64) -> Result<Data, ControlsDriverError> {
+        .failure(.driver(kIOReturnUnsupported))
+    }
     func setControlRoute(guid: UInt64, revision: UInt64, routerId: UInt32,
                          output: UInt32, input: UInt32?) -> Result<UInt64, ControlsDriverError> {
         .failure(.driver(kIOReturnUnsupported))
@@ -65,6 +69,10 @@ final class DeviceControlsViewModel: ObservableObject {
     @Published private(set) var writeStates: [UInt32: WriteState] = [:]
     @Published private(set) var message: String?
     @Published private(set) var lastUpdated: Date?
+    /// Best-effort, read-only preview diagnosis. Invalidated on every refresh
+    /// or selection change; never retained as hardware or write-admission state.
+    @Published private(set) var ff800Diagnostic: FF800SessionDiagnostic?
+
 
     private let source: any DeviceControlsSource
     private let pollInterval: Duration
@@ -100,6 +108,7 @@ final class DeviceControlsViewModel: ObservableObject {
 
     /// Re-read the device list (the AV/C units the driver knows) and the selected device's snapshot.
     func reload() {
+        ff800Diagnostic = nil
         guard source.isConnected else {
             devices = []
             writeStates = [:]
@@ -124,6 +133,7 @@ final class DeviceControlsViewModel: ObservableObject {
     }
 
     func select(_ guid: UInt64?) {
+        ff800Diagnostic = nil
         if guid != selectedGUID {
             writeStates = [:]
             lastChangeSequence = [:]
@@ -137,6 +147,8 @@ final class DeviceControlsViewModel: ObservableObject {
     /// Read the selected device's snapshot. Write states of parameters that no
     /// longer exist are dropped; a failure stays on its control until the next write.
     func refreshSnapshot() {
+        ff800Diagnostic = nil
+        refreshFF800Diagnostic()
         guard source.isConnected else {
             writeStates = [:]
             lastChangeSequence = [:]
@@ -173,6 +185,25 @@ final class DeviceControlsViewModel: ObservableObject {
         case .failure(let error):
             content = .failed("Could not read the device's controls: \(Self.describe(error)).")
         }
+    }
+
+    /// Refresh only as a consequence of an explicit viewmodel refresh.
+    /// The driver response is checked against a distinct discovery read,
+    /// including a second read to reject a reset observed during the IPC.
+    /// There is no polling and no state change at the device.
+    func refreshFF800Diagnostic() {
+        ff800Diagnostic = nil
+        guard source.isConnected, let guid = selectedGUID, guid != 0,
+              let before = source.getDiscoveredDevices()?.first(where: { $0.guid == guid })
+        else { return }
+        guard case .success(let bytes) = source.getFF800SessionDiagnostic(guid: guid),
+              let after = source.getDiscoveredDevices()?.first(where: { $0.guid == guid }),
+              before.generation == after.generation,
+              before.nodeId == after.nodeId,
+              let diagnostic = FF800SessionDiagnostic.decode(
+                  bytes, guid: guid, discoveryGeneration: after.generation)
+        else { return }
+        ff800Diagnostic = diagnostic
     }
 
     // MARK: Writing
