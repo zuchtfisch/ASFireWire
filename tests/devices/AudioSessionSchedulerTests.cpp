@@ -13,6 +13,7 @@
 
 #include "SessionTestSupport.hpp"
 #include "Audio/Protocols/RME/FF800ControlSessionDiagnostics.hpp"
+#include "Audio/Protocols/RME/FF800SessionDiagnosticWire.hpp"
 
 #include "Bus/IRM/IRMTypes.hpp"
 
@@ -83,6 +84,67 @@ private:
 using SchedulerTest = ShapedSchedulerTest<kCmpDevice>;
 using ApogeeTest = ShapedSchedulerTest<kApogeeDevice>;
 using DiceQuietPeriodTest = ShapedSchedulerTest<kDiceDevice>;
+
+TEST_F(SchedulerTest, FF800DiagnosticV1IsUnavailableWithoutKnownSession) {
+    using namespace ASFW::Audio::RME;
+    const auto absent = BuildFF800DiagnosticV1(0x1234, 10, std::nullopt, {true, true, 5, 5});
+    EXPECT_EQ(absent.abiVersion, ASFW_FF800_SESSION_DIAG_ABI_VERSION);
+    EXPECT_EQ(absent.structSize, sizeof(ASFWFF800SessionDiagV1));
+    EXPECT_EQ(absent.status, ASFWFF800SessionDiagUnavailable);
+    EXPECT_EQ(absent.reason, ASFWFF800SessionDiagUnknown);
+    EXPECT_EQ(absent.deviceGuid, 0U);
+    EXPECT_FALSE(ValidFF800DiagnosticV1(absent, 0x1234));
+}
+
+TEST_F(SchedulerTest, FF800DiagnosticV1EncodesOnlyReadOnlyPreviewFacts) {
+    using namespace ASFW::Audio::RME;
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
+    const auto idle = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(idle.has_value());
+    const auto valid = BuildFF800DiagnosticV1(
+        rig.guid, 1000, idle, {true, true, 11, 11});
+    EXPECT_TRUE(ValidFF800DiagnosticV1(valid, rig.guid));
+    EXPECT_TRUE(FF800DiagnosticRouteMatchesGeneration(valid, rig.guid, 11));
+    EXPECT_EQ(valid.reason, ASFWFF800SessionDiagEligiblePreviewOnly);
+    EXPECT_FALSE(FF800DiagnosticRouteMatchesGeneration(valid, rig.guid, 12));
+
+    // The integrity checker accepts stale-route diagnostics as descriptions,
+    // but the independent route-generation check does not call them current.
+    const auto stale = BuildFF800DiagnosticV1(
+        rig.guid, 1001, idle, {true, false, 11, 12});
+    EXPECT_TRUE(ValidFF800DiagnosticV1(stale, rig.guid));
+    EXPECT_EQ(stale.reason, ASFWFF800SessionDiagRouteNotCurrent);
+    EXPECT_FALSE(FF800DiagnosticRouteMatchesGeneration(stale, rig.guid, 12));
+    const auto mismatch = BuildFF800DiagnosticV1(
+        rig.guid, 1002, idle, {true, true, 11, 12});
+    EXPECT_TRUE(ValidFF800DiagnosticV1(mismatch, rig.guid));
+    EXPECT_EQ(mismatch.reason, ASFWFF800SessionDiagGenerationMismatch);
+    EXPECT_FALSE(FF800DiagnosticRouteMatchesGeneration(mismatch, rig.guid, 12));
+}
+
+TEST_F(SchedulerTest, FF800DiagnosticV1RejectsCorruptOrForeignEnvelope) {
+    using namespace ASFW::Audio::RME;
+    ASSERT_TRUE(rig.sessions.Ensure(rig.guid) != nullptr);
+    const auto idle = rig.sessions.CoordinationSnapshot(rig.guid);
+    ASSERT_TRUE(idle.has_value());
+    const auto valid = BuildFF800DiagnosticV1(
+        rig.guid, 1000, idle, {true, true, 10, 10});
+    auto check = [&](auto modify) {
+        auto altered = valid;
+        modify(altered);
+        EXPECT_FALSE(ValidFF800DiagnosticV1(altered, rig.guid));
+    };
+    check([](auto& v) { ++v.abiVersion; });
+    check([](auto& v) { --v.structSize; });
+    check([](auto& v) { v.status = ASFWFF800SessionDiagUnavailable; });
+    check([](auto& v) { v.reason = 99; });
+    check([](auto& v) { v.deviceGuid = 999; });
+    check([](auto& v) { v.timestampNs = 0; });
+    check([](auto& v) { v.sessionKnown = 0; });
+    check([](auto& v) { v.routeCurrent = 2; });
+    check([](auto& v) { v.reserved[0] = 1; });
+    EXPECT_FALSE(ValidFF800DiagnosticV1(valid, 0));
+}
 
 TEST_F(SchedulerTest, FF800DiagnosticReasonsDistinguishMissingSessionAndRouteState) {
     using namespace ASFW::Audio::RME;
