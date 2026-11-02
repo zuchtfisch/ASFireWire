@@ -100,7 +100,7 @@ TimingGateResult PostResetTimingCoordinator::CheckGate(uint32_t generation, Timi
         return result;
     }
 
-    uint64_t allowedAtNs = state_.selfIdCompleteNs;
+    uint64_t allowedAtNs;
     switch (gate) {
     case TimingGate::BMIncumbentContention:
         allowedAtNs = state_.bmIncumbentAllowedNs;
@@ -114,6 +114,9 @@ TimingGateResult PostResetTimingCoordinator::CheckGate(uint32_t generation, Timi
     case TimingGate::NewIsoAllocation:
         allowedAtNs = state_.newIsoAllocationAllowedNs;
         break;
+    default:
+        // Unknown gate values must never open a post-reset timing window.
+        return MakeMissingStateResult(generation, gate, nowNs);
     }
 
     return MakeGateResult(generation, gate, nowNs, state_.selfIdCompleteNs, allowedAtNs);
