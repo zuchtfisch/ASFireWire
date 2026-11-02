@@ -18,7 +18,7 @@ public:
                            Discovery::DeviceRegistry& registry,
                            const Discovery::DeviceRouteToken& route,
                            FirefaceModel model, bool s800, Scheduling::ITimerScheduler* scheduler = nullptr) noexcept
-        : registry_(registry), model_(model), io_(busOps, busInfo, registry, route), family_(io_, model, s800, scheduler), savedControls_(family_.SavedSettingsSlot()) {}
+        : registry_(registry), model_(model), io_(busOps, busInfo, registry, route), family_(io_, model, s800, scheduler), savedControls_(family_) {}
 
     IOReturn Initialize() override { return family_.LoadGeometry(); }
     IOReturn Shutdown() override { family_.CancelPendingStart(true); return kIOReturnSuccess; }
