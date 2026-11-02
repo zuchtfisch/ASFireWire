@@ -11,6 +11,7 @@
 #include "FirefaceSettings.hpp"
 #include "FF800ControlSettings.hpp"
 #include "FF800ControlWriteState.hpp"
+#include "FF800ControlPreviewGate.hpp"
 #include "FirefaceClockStatus.hpp"
 #include "FF800TransmitStart.hpp"
 #include <algorithm>
@@ -86,15 +87,14 @@ public:
         if (!io_.IsRouteCurrent() || io_.Generation().value != stateGeneration_.value)
             return std::unexpected(kIOReturnOffline);
         if (Cancelled()) return std::unexpected(kIOReturnAborted);
-        if (!lastDryRun_.settings || !lastDryRun_.written)
+        // Reset clears both cache slots; an uncertain async control write
+        // must not permit another candidate built from the old baseline.
+        // This is still a preview only, never an actual hardware write.
+        if (!HasFF800ControlPreviewBaseline(model_, controlWriteState_.Phase(),
+                                            lastDryRun_.settings, lastDryRun_.written))
             return std::unexpected(kIOReturnNotReady);
         FirefaceSettings basis = *lastDryRun_.settings;
-        // Match WriteConfig's clock policy. Never construct a candidate from
-        // flash alone when no successful register write is on record. This
-        // still is NOT proof of the current physical state/readback.
         basis.clockMaster = true;
-        if (EncodeConfig(model_, basis) != *lastDryRun_.written)
-            return std::unexpected(kIOReturnNotReady);
         const auto image = EncodeFF800ControlParameter(
             model_, basis, parameterId, valueKind, valueBits);
         if (!image) return std::unexpected(
